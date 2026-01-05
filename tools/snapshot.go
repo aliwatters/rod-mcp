@@ -43,7 +43,7 @@ var (
 		mcp.WithDescription("Select an option in a dropdown"),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
-		mcp.WithArray("values", mcp.Description("Array of values to select in the dropdown. This can be a single value or multiple values."), mcp.Items(map[string]interface{}{"type": "string", "required": true}), mcp.Required()),
+		mcp.WithArray("values", mcp.Description("Array of values to select in the dropdown. This can be a single value or multiple values."), mcp.Items(map[string]interface{}{"type": "string"}), mcp.Required()),
 	)
 )
 

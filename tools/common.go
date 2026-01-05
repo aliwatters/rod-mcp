@@ -31,6 +31,7 @@ const (
 	ScreenshotToolKey   = "rod_screenshot"
 	EvaluateToolKey     = "rod_evaluate"
 	CloseBrowserToolKey = "rod_close_browser"
+	SetHeadersToolKey   = "rod_set_headers"
 )
 
 var (
@@ -69,6 +70,10 @@ var (
 	Evaluate = mcp.NewTool(EvaluateToolKey,
 		mcp.WithDescription("Execute JavaScript in the browser console"),
 		mcp.WithString("script", mcp.Description("A function name or an unnamed function definition"), mcp.Required()),
+	)
+	SetHeaders = mcp.NewTool(SetHeadersToolKey,
+		mcp.WithDescription("Set extra HTTP headers for all requests. Useful for authentication, bypassing Cloudflare/Vercel protection, or custom headers."),
+		mcp.WithObject("headers", mcp.Description("Headers as key-value pairs, e.g. {\"Authorization\": \"Bearer token\", \"X-Custom-Header\": \"value\"}"), mcp.Required()),
 	)
 )
 
@@ -224,6 +229,31 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
 	}
+	SetHeadersHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			page, err := rodCtx.EnsurePage()
+			if err != nil {
+				log.Errorf("Failed to set headers: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to set headers: %s", err.Error()))
+			}
+			headersArg := request.Params.Arguments["headers"]
+			headersMap, ok := headersArg.(map[string]interface{})
+			if !ok {
+				return nil, errors.New("headers must be an object with key-value pairs")
+			}
+			headers := make([]string, 0, len(headersMap)*2)
+			for k, v := range headersMap {
+				headers = append(headers, k, fmt.Sprintf("%v", v))
+			}
+			_, err = page.SetExtraHeaders(headers)
+			if err != nil {
+				log.Errorf("Failed to set headers: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to set headers: %s", err.Error()))
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Set %d headers successfully", len(headersMap))), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+	}
 )
 
 var (
@@ -236,6 +266,7 @@ var (
 		Screenshot,
 		Evaluate,
 		CloseBrowser,
+		SetHeaders,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -246,5 +277,6 @@ var (
 		ScreenshotToolKey:   ScreenshotHandler,
 		EvaluateToolKey:     EvaluateHandler,
 		CloseBrowserToolKey: CloseBrowserHandler,
+		SetHeadersToolKey:   SetHeadersHandler,
 	}
 )
