@@ -37,7 +37,7 @@ var (
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("value", mcp.Description("Text to type into the element"), mcp.Required()),
 		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
-		mcp.WithBoolean("submit", mcp.Description("Whether to type one character at a time. Useful for triggering key handlers in the page. By default entire text is filled in at once."), mcp.Required()),
+		mcp.WithBoolean("submit", mcp.Description("Whether to submit entered text (press Enter after)"), mcp.Required()),
 	)
 	Selector = mcp.NewTool(SelectorToolKey,
 		mcp.WithDescription("Select an option in a dropdown"),
@@ -117,6 +117,13 @@ var (
 			}
 
 			value := request.Params.Arguments["value"].(string)
+			// Clear existing value by selecting all text first, then input new value
+			// This ensures password fields and React-controlled inputs work correctly
+			err = element.SelectAllText()
+			if err != nil {
+				log.Warnf("Failed to select all text in element %s (may be empty): %s", ele, err.Error())
+				// Continue anyway - field may be empty or select may not be supported
+			}
 			err = element.Input(value)
 
 			if err != nil {
