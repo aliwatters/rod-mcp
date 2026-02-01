@@ -191,7 +191,7 @@ func (ctx *Context) BuildSnapshot() (string, error) {
 	if ctx.page == nil {
 		return "", errors.New("No tab to capture snapshot, call rod_navigate first")
 	}
-	snapshot, err := BuildSnapshot(ctx.page)
+	snapshot, err := BuildSnapshot(ctx.page, ctx.config.CompactSnapshot)
 	if err != nil {
 		return "", err
 	}
@@ -251,6 +251,18 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "create page failed")
 	}
+
+	// Apply extra HTTP headers from config (e.g., Cloudflare bypass tokens)
+	if len(ctx.config.ExtraHTTPHeaders) > 0 {
+		headers := make([]string, 0, len(ctx.config.ExtraHTTPHeaders)*2)
+		for k, v := range ctx.config.ExtraHTTPHeaders {
+			headers = append(headers, k, v)
+		}
+		if _, err := page.SetExtraHeaders(headers); err != nil {
+			return nil, errors.Wrap(err, "set extra HTTP headers failed")
+		}
+	}
+
 	return page, nil
 }
 

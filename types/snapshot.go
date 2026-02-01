@@ -24,13 +24,17 @@ type Snapshot struct {
 	textSnapshot string
 }
 
-func BuildSnapshot(p *rod.Page) (*Snapshot, error) {
+func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 	snapshot := &Snapshot{
 		frames: []*rod.Page{},
 	}
 	yamlDoc, err := snapshot.captureSnapshotWithFrames(p)
 	if err != nil {
 		return nil, err
+	}
+
+	if compact {
+		yamlDoc = compactSnapshot(yamlDoc)
 	}
 
 	yamlBytes, err := yaml.Marshal(yamlDoc)
@@ -179,6 +183,167 @@ func (s *Snapshot) walk(node *yaml.Node, frameIndex int, frame *rod.Page) (*yaml
 		}
 	}
 	return node, nil
+}
+
+// compactSnapshot filters the YAML accessibility tree to reduce token usage.
+// It preserves interactive elements (those with [ref=...] markers), structural
+// containers, and page metadata while removing decorative text and truncating
+// long content.
+func compactSnapshot(node *yaml.Node) *yaml.Node {
+	if node == nil {
+		return nil
+	}
+
+	switch node.Kind {
+	case yaml.DocumentNode:
+		if len(node.Content) > 0 {
+			node.Content[0] = compactSnapshot(node.Content[0])
+		}
+		return node
+
+	case yaml.MappingNode:
+		var newContent []*yaml.Node
+		for i := 0; i < len(node.Content); i += 2 {
+			keyNode := node.Content[i]
+			valueNode := node.Content[i+1]
+
+			// Process the key
+			filteredKey := compactSnapshot(keyNode)
+			if filteredKey == nil {
+				continue
+			}
+
+			// Process the value
+			filteredValue := compactSnapshot(valueNode)
+			if filteredValue == nil {
+				// Key has ref or is structural but value is empty — keep key with empty value
+				if nodeHasRef(keyNode) || isStructuralRole(keyNode.Value) {
+					filteredValue = &yaml.Node{Kind: yaml.ScalarNode, Value: ""}
+				} else {
+					continue
+				}
+			}
+
+			newContent = append(newContent, filteredKey, filteredValue)
+		}
+		if len(newContent) == 0 {
+			return nil
+		}
+		node.Content = newContent
+		return node
+
+	case yaml.SequenceNode:
+		var newContent []*yaml.Node
+		for _, item := range node.Content {
+			filtered := compactSnapshot(item)
+			if filtered != nil {
+				newContent = append(newContent, filtered)
+			}
+		}
+		if len(newContent) == 0 {
+			return nil
+		}
+		// Truncate long repetitive sequences
+		if len(newContent) > 10 {
+			summary := &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Tag:   "!!str",
+				Value: fmt.Sprintf("... (%d more items)", len(newContent)-5),
+			}
+			truncated := make([]*yaml.Node, 6)
+			copy(truncated, newContent[:5])
+			truncated[5] = summary
+			newContent = truncated
+		}
+		node.Content = newContent
+		return node
+
+	case yaml.ScalarNode:
+		if node.Tag != "!!str" {
+			return node
+		}
+		value := node.Value
+
+		// Always keep nodes with element refs
+		if strings.Contains(value, "[ref=") {
+			node.Value = truncateScalar(value, 120)
+			return node
+		}
+
+		// Always keep structural role nodes
+		if isStructuralRole(value) {
+			node.Value = truncateScalar(value, 80)
+			return node
+		}
+
+		// Remove pure text nodes (no ref, no structural role)
+		if strings.HasPrefix(value, "text: ") || strings.HasPrefix(value, "text:") {
+			return nil
+		}
+
+		// Keep other scalars but truncate long ones
+		if len(value) > 80 {
+			node.Value = truncateScalar(value, 80)
+		}
+		return node
+	}
+
+	return node
+}
+
+// nodeHasRef checks if any scalar in the subtree contains [ref=...]
+func nodeHasRef(node *yaml.Node) bool {
+	if node == nil {
+		return false
+	}
+	if node.Kind == yaml.ScalarNode {
+		return strings.Contains(node.Value, "[ref=")
+	}
+	for _, child := range node.Content {
+		if nodeHasRef(child) {
+			return true
+		}
+	}
+	return false
+}
+
+// isStructuralRole checks if a scalar value starts with a structural ARIA role
+func isStructuralRole(value string) bool {
+	structuralPrefixes := []string{
+		"heading ", "navigation ", "main", "banner", "contentinfo",
+		"complementary", "list ", "listitem", "table ", "row ", "cell ",
+		"dialog ", "alert ", "form ", "search ", "img ", "iframe ",
+		"region ", "article ", "section ", "group ", "toolbar ",
+		"menu ", "menubar ", "menuitem ", "tab ", "tablist ", "tabpanel ",
+	}
+	lower := strings.ToLower(value)
+	for _, prefix := range structuralPrefixes {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// truncateScalar truncates a string to maxLen, preserving any [ref=...] suffix
+func truncateScalar(value string, maxLen int) string {
+	if len(value) <= maxLen {
+		return value
+	}
+
+	// Preserve [ref=...] and other bracket attributes at the end
+	refIdx := strings.LastIndex(value, "[ref=")
+	if refIdx >= 0 {
+		suffix := value[refIdx:]
+		prefix := value[:refIdx]
+		maxPrefix := maxLen - len(suffix) - 4 // leave room for "... "
+		if maxPrefix > 0 && maxPrefix < len(prefix) {
+			return prefix[:maxPrefix] + "... " + suffix
+		}
+		return value // can't truncate safely, return as-is
+	}
+
+	return value[:maxLen-3] + "..."
 }
 
 func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {

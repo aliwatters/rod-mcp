@@ -12,16 +12,18 @@ import (
 const ConfigName = "rod-mcp.yaml"
 
 type Config struct {
-	Mode           Mode         `yaml:"mode" json:"mode"`
-	CDPEndpoint    string       `yaml:"cdpEndpoint" json:"cdpEndpoint"`
-	ServerName     string       `yaml:"serverName" json:"serverName"`
-	ServerVersion  string       `yaml:"-" json:"-"`
-	BrowserBinPath string       `yaml:"browserBinPath" json:"browserBinPath"`
-	Headless       bool         `yaml:"headless" json:"headless"`
-	BrowserTempDir string       `yaml:"browserTempDir" json:"browserTempDir"`
-	NoSandbox      bool         `yaml:"noSandbox" json:"noSandbox"`
-	Proxy          string       `yaml:"proxy" json:"proxy"`
-	LoggerConfig   LoggerConfig `yaml:"loggerConfig" json:"loggerConfig"`
+	Mode             Mode              `yaml:"mode" json:"mode"`
+	CDPEndpoint      string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
+	ServerName       string            `yaml:"serverName" json:"serverName"`
+	ServerVersion    string            `yaml:"-" json:"-"`
+	BrowserBinPath   string            `yaml:"browserBinPath" json:"browserBinPath"`
+	Headless         bool              `yaml:"headless" json:"headless"`
+	BrowserTempDir   string            `yaml:"browserTempDir" json:"browserTempDir"`
+	NoSandbox        bool              `yaml:"noSandbox" json:"noSandbox"`
+	Proxy            string            `yaml:"proxy" json:"proxy"`
+	LoggerConfig     LoggerConfig      `yaml:"loggerConfig" json:"loggerConfig"`
+	ExtraHTTPHeaders map[string]string `yaml:"extraHTTPHeaders" json:"extraHTTPHeaders"`
+	CompactSnapshot  bool              `yaml:"compactSnapshot" json:"compactSnapshot"`
 }
 
 var (
