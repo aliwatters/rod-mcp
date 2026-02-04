@@ -91,6 +91,12 @@ var (
 				log.Errorf("Failed to navigate to %s: %s", url, err.Error())
 				return nil, errors.New(fmt.Sprintf("Failed to navigate to %s: %s", url, err.Error()))
 			}
+
+			// Update headers for the target URL (applies domain-specific headers from config)
+			if err := rodCtx.UpdateHeadersForURL(url); err != nil {
+				log.Warnf("Failed to update headers for %s: %s", url, err.Error())
+			}
+
 			err = page.Navigate(url)
 			if err != nil {
 				log.Errorf("Failed to navigate to %s: %s", url, err.Error())
