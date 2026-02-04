@@ -191,7 +191,7 @@ func (ctx *Context) BuildSnapshot() (string, error) {
 	if ctx.page == nil {
 		return "", errors.New("No tab to capture snapshot, call rod_navigate first")
 	}
-	snapshot, err := BuildSnapshot(ctx.page)
+	snapshot, err := BuildSnapshot(ctx.page, ctx.config.CompactSnapshot)
 	if err != nil {
 		return "", err
 	}
@@ -246,12 +246,46 @@ func (ctx *Context) closeBrowser() error {
 }
 
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
-	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: strings.Join(urls, "/")})
+	targetURL := strings.Join(urls, "/")
+	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
 	page.EvalOnNewDocument(js.InjectedSnapShot)
 	if err != nil {
 		return nil, errors.Wrap(err, "create page failed")
 	}
+
+	// Apply HTTP headers from config (global + domain-specific)
+	allHeaders := ctx.config.GetHeadersForURL(targetURL)
+	if len(allHeaders) > 0 {
+		headers := make([]string, 0, len(allHeaders)*2)
+		for k, v := range allHeaders {
+			headers = append(headers, k, v)
+		}
+		if _, err := page.SetExtraHeaders(headers); err != nil {
+			return nil, errors.Wrap(err, "set extra HTTP headers failed")
+		}
+	}
+
 	return page, nil
+}
+
+// UpdateHeadersForURL updates the extra HTTP headers on the current page based on the target URL.
+// This should be called before navigating to a new domain to ensure domain-specific headers are applied.
+func (ctx *Context) UpdateHeadersForURL(url string) error {
+	if ctx.page == nil {
+		return nil
+	}
+
+	allHeaders := ctx.config.GetHeadersForURL(url)
+	if len(allHeaders) > 0 {
+		headers := make([]string, 0, len(allHeaders)*2)
+		for k, v := range allHeaders {
+			headers = append(headers, k, v)
+		}
+		if _, err := ctx.page.SetExtraHeaders(headers); err != nil {
+			return errors.Wrap(err, "set extra HTTP headers failed")
+		}
+	}
+	return nil
 }
 
 // Close the browser

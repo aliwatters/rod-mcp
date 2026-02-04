@@ -10,10 +10,11 @@ import (
 )
 
 type SubCfg struct {
-	Headless    bool
-	ConfigPath  string
-	Mode        types.Mode
-	CDPEndpoint string
+	Headless        bool
+	ConfigPath      string
+	Mode            types.Mode
+	CDPEndpoint     string
+	CompactSnapshot bool
 }
 
 func RunCmd() (*SubCfg, error) {
@@ -52,6 +53,11 @@ func RunCmd() (*SubCfg, error) {
 				Aliases: []string{"vs"},
 				Usage:   "use to support vision LLM will load  vision tools",
 			},
+			&cli.BoolFlag{
+				Name:    "compact-snapshot",
+				Aliases: []string{"cs"},
+				Usage:   "enable compact snapshot mode to reduce token usage by filtering non-interactive elements",
+			},
 		},
 		Before: func(c *cli.Context) error {
 			if !c.Bool("no-banner") {
@@ -67,6 +73,9 @@ func RunCmd() (*SubCfg, error) {
 
 			if c.Bool("vision") {
 				subConfig.Mode = types.Vision
+			}
+			if c.Bool("compact-snapshot") {
+				subConfig.CompactSnapshot = true
 			}
 			return nil
 		},
