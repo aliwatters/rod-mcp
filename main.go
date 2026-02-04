@@ -38,6 +38,10 @@ func main() {
 		cfg.CDPEndpoint = subCfg.CDPEndpoint
 	}
 
+	if subCfg.CompactSnapshot {
+		cfg.CompactSnapshot = true
+	}
+
 	runner := NewRunner(ctx, *cfg)
 	go func() {
 		c := make(chan os.Signal, 1)

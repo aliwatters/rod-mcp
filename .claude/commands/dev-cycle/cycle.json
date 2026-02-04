@@ -1,0 +1,109 @@
+{
+  "name": "dev-cycle",
+  "description": "Complete development cycle (discovery → verify)",
+  "version": "1.0.0",
+  "argument_hint": "[issue/PR number]",
+
+  "phases": [
+    {
+      "id": "setup",
+      "name": "Setup",
+      "description": "Initialize work session, validate workspace",
+      "prompt": "setup.md",
+      "timeout": 120000,
+      "automation_level": "full",
+      "skippable": false,
+      "pre_instructions_support": false,
+      "blocking_gates": []
+    },
+    {
+      "id": "discovery",
+      "name": "Discovery",
+      "description": "Find and analyze issue, validate appropriateness",
+      "prompt": "discovery.md",
+      "timeout": 300000,
+      "automation_level": "full",
+      "pre_instructions_support": true,
+      "skippable": false,
+      "blocking_gates": []
+    },
+    {
+      "id": "implementation",
+      "name": "Implementation",
+      "description": "Write code, tests, documentation",
+      "prompt": "implementation.md",
+      "timeout": 600000,
+      "automation_level": "semi_automated",
+      "pre_instructions_support": false,
+      "skippable": false,
+      "blocking_gates": ["quality_checks"]
+    },
+    {
+      "id": "refinement",
+      "name": "Refinement",
+      "description": "Address review feedback, prepare for humans",
+      "prompt": "refinement.md",
+      "timeout": 1200000,
+      "automation_level": "semi_automated",
+      "pre_instructions_support": false,
+      "skippable": false,
+      "blocking_gates": ["all_comments_acknowledged", "ci_passing"]
+    },
+    {
+      "id": "retrospective",
+      "name": "Retrospective",
+      "description": "Extract learnings, identify friction patterns",
+      "prompt": "retrospective.md",
+      "timeout": 300000,
+      "automation_level": "full",
+      "pre_instructions_support": false,
+      "skippable": false,
+      "blocking_gates": []
+    },
+    {
+      "id": "verify",
+      "name": "Verify",
+      "description": "Final verification before completion",
+      "prompt": "verify-modern.md",
+      "timeout": 300000,
+      "automation_level": "full",
+      "pre_instructions_support": false,
+      "skippable": false,
+      "blocking_gates": []
+    }
+  ],
+
+  "transitions": {
+    "setup": "discovery",
+    "discovery": "implementation",
+    "implementation": "refinement",
+    "refinement": "retrospective",
+    "retrospective": "verify",
+    "verify": null
+  },
+
+  "state": {
+    "file_pattern": ".workflow-state.{WORKSPACE}",
+    "required_fields": ["PHASE", "ISSUE", "BRANCH"],
+    "optional_fields": ["PR", "IMPLEMENTATION_START", "REFINEMENT_START"],
+    "workspace_detection": "auto"
+  },
+
+  "error_handling": {
+    "on_phase_failure": "log_and_stop",
+    "retry_strategy": "manual",
+    "friction_log": "tmp/friction-{ISSUE}.md"
+  },
+
+  "integrations": {
+    "github": {
+      "issue_claiming": true,
+      "pr_creation": true,
+      "label_management": true
+    },
+    "git": {
+      "branch_creation": true,
+      "auto_commit": false
+    }
+  }
+}
