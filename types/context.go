@@ -246,16 +246,18 @@ func (ctx *Context) closeBrowser() error {
 }
 
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
-	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: strings.Join(urls, "/")})
+	targetURL := strings.Join(urls, "/")
+	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
 	page.EvalOnNewDocument(js.InjectedSnapShot)
 	if err != nil {
 		return nil, errors.Wrap(err, "create page failed")
 	}
 
-	// Apply extra HTTP headers from config (e.g., Cloudflare bypass tokens)
-	if len(ctx.config.ExtraHTTPHeaders) > 0 {
-		headers := make([]string, 0, len(ctx.config.ExtraHTTPHeaders)*2)
-		for k, v := range ctx.config.ExtraHTTPHeaders {
+	// Apply HTTP headers from config (global + domain-specific)
+	allHeaders := ctx.config.GetHeadersForURL(targetURL)
+	if len(allHeaders) > 0 {
+		headers := make([]string, 0, len(allHeaders)*2)
+		for k, v := range allHeaders {
 			headers = append(headers, k, v)
 		}
 		if _, err := page.SetExtraHeaders(headers); err != nil {
@@ -264,6 +266,26 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	}
 
 	return page, nil
+}
+
+// UpdateHeadersForURL updates the extra HTTP headers on the current page based on the target URL.
+// This should be called before navigating to a new domain to ensure domain-specific headers are applied.
+func (ctx *Context) UpdateHeadersForURL(url string) error {
+	if ctx.page == nil {
+		return nil
+	}
+
+	allHeaders := ctx.config.GetHeadersForURL(url)
+	if len(allHeaders) > 0 {
+		headers := make([]string, 0, len(allHeaders)*2)
+		for k, v := range allHeaders {
+			headers = append(headers, k, v)
+		}
+		if _, err := ctx.page.SetExtraHeaders(headers); err != nil {
+			return errors.Wrap(err, "set extra HTTP headers failed")
+		}
+	}
+	return nil
 }
 
 // Close the browser
