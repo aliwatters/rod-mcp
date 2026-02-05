@@ -24,6 +24,10 @@ type Config struct {
 	LoggerConfig     LoggerConfig      `yaml:"loggerConfig" json:"loggerConfig"`
 	ExtraHTTPHeaders map[string]string `yaml:"extraHTTPHeaders" json:"extraHTTPHeaders"`
 	CompactSnapshot  bool              `yaml:"compactSnapshot" json:"compactSnapshot"`
+	// DomainHeaders maps domain patterns to headers that should be injected for matching URLs.
+	// Patterns support wildcards: "*.example.com" matches "www.example.com", "api.example.com", etc.
+	// Headers from matching patterns are merged with ExtraHTTPHeaders.
+	DomainHeaders map[string]map[string]string `yaml:"domainHeaders" json:"domainHeaders"`
 }
 
 var (
@@ -103,4 +107,81 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, errors.Wrapf(err, "config file name is wrong")
 	}
 	return nil, errors.Wrapf(err, "config path %s not found", configPath)
+}
+
+// GetHeadersForURL returns all headers that should be applied for the given URL.
+// This merges ExtraHTTPHeaders with any matching DomainHeaders patterns.
+func (c *Config) GetHeadersForURL(urlStr string) map[string]string {
+	result := make(map[string]string)
+
+	// Start with global headers
+	for k, v := range c.ExtraHTTPHeaders {
+		result[k] = v
+	}
+
+	// If no domain headers configured or URL is empty, return global headers only
+	if len(c.DomainHeaders) == 0 || urlStr == "" {
+		return result
+	}
+
+	// Extract host from URL
+	host := extractHost(urlStr)
+	if host == "" {
+		return result
+	}
+
+	// Check each domain pattern
+	for pattern, headers := range c.DomainHeaders {
+		if matchDomainPattern(pattern, host) {
+			for k, v := range headers {
+				result[k] = v
+			}
+		}
+	}
+
+	return result
+}
+
+// extractHost extracts the hostname from a URL string
+func extractHost(urlStr string) string {
+	// Handle URLs without scheme
+	if !strings.Contains(urlStr, "://") {
+		urlStr = "https://" + urlStr
+	}
+
+	// Find the host portion
+	start := strings.Index(urlStr, "://")
+	if start == -1 {
+		return ""
+	}
+	start += 3
+
+	end := strings.IndexAny(urlStr[start:], ":/")
+	if end == -1 {
+		return urlStr[start:]
+	}
+	return urlStr[start : start+end]
+}
+
+// matchDomainPattern checks if a host matches a domain pattern.
+// Supports wildcard prefix: "*.example.com" matches "www.example.com", "api.example.com"
+// Exact match: "example.com" only matches "example.com"
+func matchDomainPattern(pattern, host string) bool {
+	pattern = strings.ToLower(pattern)
+	host = strings.ToLower(host)
+
+	// Wildcard pattern: *.example.com
+	if strings.HasPrefix(pattern, "*.") {
+		suffix := pattern[1:] // ".example.com"
+		// Match if host ends with the suffix (subdomain) or equals the base domain
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+		// Also match the base domain itself (*.example.com should match example.com)
+		baseDomain := pattern[2:]
+		return host == baseDomain
+	}
+
+	// Exact match
+	return pattern == host
 }
