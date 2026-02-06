@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/charmbracelet/log"
@@ -11,8 +12,6 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"os"
-	"path/filepath"
 	"time"
 )
 
@@ -296,6 +295,7 @@ var (
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				log.Errorf("Failed to screenshot: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to screenshot: %s", err.Error()))
 			}
 			req := &proto.PageCaptureScreenshot{
 				Format: proto.PageCaptureScreenshotFormatPng,
@@ -303,15 +303,11 @@ var (
 			bin, err := page.Screenshot(false, req)
 			if err != nil {
 				log.Errorf("Failed to screenshot: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to capture screenshot: %s", err.Error()))
 			}
 			fileName := request.Params.Arguments["name"].(string)
-			toFile := []string{"tmp", "screenshots", fileName + ".png"}
-			filePath := filepath.Join(toFile...)
-			err = os.WriteFile(filePath, bin, 0o664)
-			if err != nil {
-				log.Errorf("Failed to screenshot: %s", err.Error())
-			}
-			return mcp.NewToolResultText(fmt.Sprintf("Save to %s", filePath)), nil
+			encoded := base64.StdEncoding.EncodeToString(bin)
+			return mcp.NewToolResultImage(fmt.Sprintf("Screenshot captured: %s", fileName), encoded, "image/png"), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
 	}
