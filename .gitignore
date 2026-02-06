@@ -51,3 +51,5 @@ debug/
 # Build output directory
 build/
 dist/ 
+# Claude Code commands (synced globally via ~/.claude/commands/)
+.claude/commands/
