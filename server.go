@@ -25,6 +25,8 @@ func NewServer(stdCtx context.Context, cfg types.Config) *Server {
 	case types.Text:
 		ser.registerTools(tools.TextTools, tools.TextToolHandlers)
 	case types.Vision:
+		log.Warn("Vision mode is not yet implemented, falling back to Text mode")
+		ser.registerTools(tools.TextTools, tools.TextToolHandlers)
 	}
 	return ser
 
