@@ -3,7 +3,7 @@ package utils
 import (
 	"fmt"
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod-mcp/types/js"
+	"github.com/aliwatters/rod-mcp/types/js"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

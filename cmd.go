@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/go-rod/rod-mcp/banner"
-	"github.com/go-rod/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/banner"
+	"github.com/aliwatters/rod-mcp/types"
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"os"

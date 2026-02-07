@@ -3,7 +3,7 @@ package banner
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/go-rod/rod-mcp/utils"
+	"github.com/aliwatters/rod-mcp/utils"
 	"runtime"
 )
 
