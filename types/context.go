@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"github.com/charmbracelet/log"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"os"
@@ -173,11 +174,17 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		if handlerCallOpts.WithSnapshot {
-			snapshot, _ := ctx.BuildSnapshot()
-			result.Content = append(result.Content, mcp.TextContent{
-				Type: "text",
-				Text: snapshot,
-			})
+			snapshot, err := ctx.BuildSnapshot()
+			if err != nil {
+				log.Warnf("Failed to build snapshot: %s", err)
+				snapshot = fmt.Sprintf("(snapshot unavailable: %s)", err)
+			}
+			if snapshot != "" {
+				result.Content = append(result.Content, mcp.TextContent{
+					Type: "text",
+					Text: snapshot,
+				})
+			}
 		}
 		return result, nil
 	}

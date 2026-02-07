@@ -12,6 +12,21 @@ import (
 	"strings"
 )
 
+const (
+	// maxSequenceItems is the threshold above which sequences get truncated in compact mode.
+	maxSequenceItems = 10
+	// sequencePreviewItems is the number of items to keep when truncating long sequences.
+	sequencePreviewItems = 5
+	// maxRefScalarLen is the max length for scalars containing element refs.
+	maxRefScalarLen = 120
+	// maxStructuralScalarLen is the max length for structural role scalars.
+	maxStructuralScalarLen = 80
+	// truncationEllipsis is inserted when truncating scalars near a [ref=...] suffix.
+	truncationEllipsis = "... "
+	// truncationSuffixPad is the character budget reserved for the ellipsis when preserving ref suffixes.
+	truncationSuffixPad = len(truncationEllipsis)
+)
+
 const snapshotTpl = `
 - Page URL: {{ .URL }}
 - Page Title: {{ .Title }}
@@ -244,15 +259,15 @@ func compactSnapshot(node *yaml.Node) *yaml.Node {
 			return nil
 		}
 		// Truncate long repetitive sequences
-		if len(newContent) > 10 {
+		if len(newContent) > maxSequenceItems {
 			summary := &yaml.Node{
 				Kind:  yaml.ScalarNode,
 				Tag:   "!!str",
-				Value: fmt.Sprintf("... (%d more items)", len(newContent)-5),
+				Value: fmt.Sprintf("... (%d more items)", len(newContent)-sequencePreviewItems),
 			}
-			truncated := make([]*yaml.Node, 6)
-			copy(truncated, newContent[:5])
-			truncated[5] = summary
+			truncated := make([]*yaml.Node, sequencePreviewItems+1)
+			copy(truncated, newContent[:sequencePreviewItems])
+			truncated[sequencePreviewItems] = summary
 			newContent = truncated
 		}
 		node.Content = newContent
@@ -266,13 +281,13 @@ func compactSnapshot(node *yaml.Node) *yaml.Node {
 
 		// Always keep nodes with element refs
 		if strings.Contains(value, "[ref=") {
-			node.Value = truncateScalar(value, 120)
+			node.Value = truncateScalar(value, maxRefScalarLen)
 			return node
 		}
 
 		// Always keep structural role nodes
 		if isStructuralRole(value) {
-			node.Value = truncateScalar(value, 80)
+			node.Value = truncateScalar(value, maxStructuralScalarLen)
 			return node
 		}
 
@@ -282,8 +297,8 @@ func compactSnapshot(node *yaml.Node) *yaml.Node {
 		}
 
 		// Keep other scalars but truncate long ones
-		if len(value) > 80 {
-			node.Value = truncateScalar(value, 80)
+		if len(value) > maxStructuralScalarLen {
+			node.Value = truncateScalar(value, maxStructuralScalarLen)
 		}
 		return node
 	}
@@ -336,9 +351,9 @@ func truncateScalar(value string, maxLen int) string {
 	if refIdx >= 0 {
 		suffix := value[refIdx:]
 		prefix := value[:refIdx]
-		maxPrefix := maxLen - len(suffix) - 4 // leave room for "... "
+		maxPrefix := maxLen - len(suffix) - truncationSuffixPad
 		if maxPrefix > 0 && maxPrefix < len(prefix) {
-			return prefix[:maxPrefix] + "... " + suffix
+			return prefix[:maxPrefix] + truncationEllipsis + suffix
 		}
 		return value // can't truncate safely, return as-is
 	}
