@@ -1,5 +1,5 @@
 package types
 
 type ToolHandlerCallOpts struct {
-	WitSnapshot bool
+	WithSnapshot bool
 }

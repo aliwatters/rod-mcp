@@ -179,7 +179,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Navigated to %s", url)), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: rodCtx.CurrentMode() == types.Text})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 
 	GoBackHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -197,7 +197,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Go back successfully"), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: rodCtx.CurrentMode() == types.Text})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 
 	GoForwardHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -215,7 +215,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Go forward successfully"), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: rodCtx.CurrentMode() == types.Text})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 
 	ReLoadHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -233,7 +233,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Reload current page successfully"), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: rodCtx.CurrentMode() == types.Text})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 
 	PressKeyHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -257,7 +257,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Press key %s successfully", keyStr)), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: rodCtx.CurrentMode() == types.Text})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 	CloseBrowserHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -268,7 +268,7 @@ var (
 			}
 			return mcp.NewToolResultText("Close browser successfully"), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 	EvaluateHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -288,7 +288,7 @@ var (
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Evaluate code successfully with result: %s", r.Result.Value.String())), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 	ScreenshotHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -309,7 +309,7 @@ var (
 			encoded := base64.StdEncoding.EncodeToString(bin)
 			return mcp.NewToolResultImage(fmt.Sprintf("Screenshot captured: %s", fileName), encoded, "image/png"), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 	SetHeadersHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -334,7 +334,7 @@ var (
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Set %d headers successfully", len(headersMap))), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
 

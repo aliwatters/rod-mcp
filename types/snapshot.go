@@ -39,7 +39,7 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 
 	yamlBytes, err := yaml.Marshal(yamlDoc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed,because of yaml marsha")
+		return nil, errors.Wrapf(err, "capture snapshot with frames failed,because of yaml marshal")
 	}
 
 	pageInfo, err := p.Info()
@@ -53,9 +53,9 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 		"Snapshot": strings.TrimSpace(string(yamlBytes)),
 		"Frames":   len(snapshot.frames),
 	}
-	res, err := utils.ExecuteTemple(snapshotTpl, tplInfo)
+	res, err := utils.ExecuteTemplate(snapshotTpl, tplInfo)
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed, because of tple exec failed")
+		return nil, errors.Wrapf(err, "capture snapshot with frames failed, because of template exec failed")
 	}
 	snapshot.textSnapshot = res
 	return snapshot, nil
