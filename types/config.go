@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/go-rod/rod-mcp/utils"
+	"github.com/aliwatters/rod-mcp/utils"
 	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 	"os"

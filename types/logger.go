@@ -2,7 +2,7 @@ package types
 
 import (
 	"github.com/charmbracelet/log"
-	"github.com/go-rod/rod-mcp/utils"
+	"github.com/aliwatters/rod-mcp/utils"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
