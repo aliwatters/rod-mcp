@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"math/rand"
 	"text/template"
-	"time"
 )
 
 func RandomString(length int) string {
-	rand.Seed(time.Now().UnixNano())
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	result := make([]rune, length)
 	for i := range result {
@@ -17,9 +15,9 @@ func RandomString(length int) string {
 	return string(result)
 }
 
-func ExecuteTemple(temple string, res any) (string, error) {
+func ExecuteTemplate(tmplStr string, res any) (string, error) {
 	var out bytes.Buffer
-	tmpl, err := template.New("tpl").Parse(temple)
+	tmpl, err := template.New("tpl").Parse(tmplStr)
 	if err != nil {
 		return "", err
 	}
