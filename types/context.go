@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/go-rod/rod"
 	"github.com/aliwatters/rod-mcp/types/js"
@@ -100,10 +99,9 @@ type Context struct {
 	stdContext context.Context
 	config     Config
 	browser    *rod.Browser
-	page       *rod.Page
-	stateLock  sync.Mutex
-	isInitial  atomic.Bool
-	snapshot   *Snapshot
+	page      *rod.Page
+	stateLock sync.Mutex
+	snapshot  *Snapshot
 	mode       Mode
 }
 
@@ -174,7 +172,7 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
-		if handlerCallOpts.WitSnapshot {
+		if handlerCallOpts.WithSnapshot {
 			snapshot, _ := ctx.BuildSnapshot()
 			result.Content = append(result.Content, mcp.TextContent{
 				Type: "text",
@@ -256,11 +254,7 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	// Apply HTTP headers from config (global + domain-specific)
 	allHeaders := ctx.config.GetHeadersForURL(targetURL)
 	if len(allHeaders) > 0 {
-		headers := make([]string, 0, len(allHeaders)*2)
-		for k, v := range allHeaders {
-			headers = append(headers, k, v)
-		}
-		if _, err := page.SetExtraHeaders(headers); err != nil {
+		if _, err := page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
 			return nil, errors.Wrap(err, "set extra HTTP headers failed")
 		}
 	}
@@ -277,11 +271,7 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 
 	allHeaders := ctx.config.GetHeadersForURL(url)
 	if len(allHeaders) > 0 {
-		headers := make([]string, 0, len(allHeaders)*2)
-		for k, v := range allHeaders {
-			headers = append(headers, k, v)
-		}
-		if _, err := ctx.page.SetExtraHeaders(headers); err != nil {
+		if _, err := ctx.page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
 			return errors.Wrap(err, "set extra HTTP headers failed")
 		}
 	}

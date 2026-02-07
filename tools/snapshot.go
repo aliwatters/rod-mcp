@@ -52,13 +52,13 @@ var (
 		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			snapshot, err := rodCtx.BuildSnapshot()
 			if err != nil {
-				return nil, errors.Wrapf(err, "Failed to capture snapshoot")
+				return nil, errors.Wrapf(err, "Failed to capture snapshot")
 			}
 
 			return mcp.NewToolResultText(snapshot), nil
 
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: false})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -91,7 +91,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Click element %s successfully", ele)), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: true})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -141,7 +141,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Fill out element %s successfully", ele)), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: true})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -178,7 +178,7 @@ var (
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Select option(s) in element %s successfully", ele)), nil
 		}
-		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WitSnapshot: true})
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
 )
 
