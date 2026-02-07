@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"github.com/charmbracelet/log"
-	"github.com/go-rod/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/types"
 	"os"
 	"os/signal"
 	"syscall"

@@ -3,8 +3,8 @@ package main
 import (
 	"context"
 	"github.com/charmbracelet/log"
-	"github.com/go-rod/rod-mcp/tools"
-	"github.com/go-rod/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/tools"
+	"github.com/aliwatters/rod-mcp/types"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )

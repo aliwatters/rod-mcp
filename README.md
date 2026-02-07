@@ -14,9 +14,6 @@
 </div>
 
 
-<h3>Engilsh | <a href='./README_CN.md'> 中文 </a></h3>
-
-
 ## Features
 
 - 🚀 Browser automation powered by Rod
@@ -41,7 +38,7 @@
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/go-rod/rod-mcp.git
+git clone https://github.com/aliwatters/rod-mcp.git
 cd rod-mcp
 ```
 
@@ -59,7 +56,7 @@ go build
 
 ### Basic Usage
 
-1. Clone Repo and Build Self or [Go to Download Release](https://github.com/go-rod/rod-mcp/releases)
+1. Clone Repo and Build Self or [Go to Download Release](https://github.com/aliwatters/rod-mcp/releases)
 2. Configure MCP:
 ```json
 {
@@ -102,6 +99,10 @@ rod-mcp/
 ## Contribution Guidelines
 
 Welcome to submit Pull Request or create Issue!
+
+## Attribution
+
+This project is a fork of [go-rod/rod-mcp](https://github.com/go-rod/rod-mcp) by the Go Rod Team. The original project provided the foundation for browser automation via the Model Context Protocol.
 
 ## License
 
