@@ -5,14 +5,17 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
+	"time"
+
 	"github.com/charmbracelet/log"
-	"github.com/aliwatters/rod-mcp/types"
-	"github.com/aliwatters/rod-mcp/utils"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"time"
+
+	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/utils"
 )
 
 const (
@@ -127,9 +130,8 @@ var (
 		mcp.WithString("key", mcp.Description("Name of the key to press or a character to generate, such as `ArrowLeft` or `a`"), mcp.Required()),
 	)
 	Pdf = mcp.NewTool(PdfToolKey,
-		mcp.WithDescription("Generate a PDF from the current page"),
-		mcp.WithString("file_path", mcp.Description("Path to save the PDF file"), mcp.Required()),
-		mcp.WithString("file_name", mcp.Description("Name of the PDF file"), mcp.Required()),
+		mcp.WithDescription("Generate a PDF of the current page and return as base64 data"),
+		mcp.WithString("name", mcp.Description("Name or description of the PDF"), mcp.Required()),
 	)
 	CloseBrowser = mcp.NewTool(CloseBrowserToolKey,
 		mcp.WithDescription("Close the browser"),
@@ -311,6 +313,36 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	PdfHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			page, err := rodCtx.ControlledPage()
+			if err != nil {
+				log.Errorf("Failed to generate PDF: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to generate PDF: %s", err.Error()))
+			}
+			reader, err := page.PDF(&proto.PagePrintToPDF{})
+			if err != nil {
+				log.Errorf("Failed to generate PDF: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to generate PDF: %s", err.Error()))
+			}
+			bin, err := io.ReadAll(reader)
+			if err != nil {
+				log.Errorf("Failed to read PDF data: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to read PDF data: %s", err.Error()))
+			}
+			name := request.Params.Arguments["name"].(string)
+			encoded := base64.StdEncoding.EncodeToString(bin)
+			return mcp.NewToolResultResource(
+				fmt.Sprintf("PDF generated: %s", name),
+				mcp.BlobResourceContents{
+					URI:      fmt.Sprintf("pdf://%s", name),
+					MIMEType: "application/pdf",
+					Blob:     encoded,
+				},
+			), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 	SetHeadersHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.EnsurePage()
@@ -346,6 +378,7 @@ var (
 		ReLoad,
 		PressKey,
 		Screenshot,
+		Pdf,
 		Evaluate,
 		CloseBrowser,
 		SetHeaders,
@@ -357,6 +390,7 @@ var (
 		ReloadToolKey:       ReLoadHandler,
 		PressKeyToolKey:     PressKeyHandler,
 		ScreenshotToolKey:   ScreenshotHandler,
+		PdfToolKey:          PdfHandler,
 		EvaluateToolKey:     EvaluateHandler,
 		CloseBrowserToolKey: CloseBrowserHandler,
 		SetHeadersToolKey:   SetHeadersHandler,
