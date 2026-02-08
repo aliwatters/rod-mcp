@@ -102,6 +102,14 @@ type ConsoleMessage struct {
 	Text  string `json:"text"`
 }
 
+// NetworkRequest represents a captured network request with its response.
+type NetworkRequest struct {
+	Method string `json:"method"`
+	URL    string `json:"url"`
+	Status int    `json:"status"`
+	Type   string `json:"type"`
+}
+
 type Context struct {
 	stdContext       context.Context
 	config          Config
@@ -111,6 +119,9 @@ type Context struct {
 	snapshot        *Snapshot
 	mode            Mode
 	consoleMessages []ConsoleMessage
+	networkRequests []NetworkRequest
+	// pendingRequests tracks in-flight requests by ID for response correlation.
+	pendingRequests map[string]int
 }
 
 func NewContext(ctx context.Context, cfg Config) *Context {
@@ -277,7 +288,7 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
-	// Listen for console messages
+	// Listen for console messages and network events
 	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
 		var parts []string
 		for _, arg := range e.Args {
@@ -289,6 +300,27 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 			Level: string(e.Type),
 			Text:  text,
 		})
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkRequestWillBeSent) {
+		ctx.stateLock.Lock()
+		if ctx.pendingRequests == nil {
+			ctx.pendingRequests = make(map[string]int)
+		}
+		idx := len(ctx.networkRequests)
+		ctx.networkRequests = append(ctx.networkRequests, NetworkRequest{
+			Method: e.Request.Method,
+			URL:    e.Request.URL,
+			Type:   string(e.Type),
+		})
+		ctx.pendingRequests[string(e.RequestID)] = idx
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkResponseReceived) {
+		ctx.stateLock.Lock()
+		if idx, ok := ctx.pendingRequests[string(e.RequestID)]; ok {
+			ctx.networkRequests[idx].Status = e.Response.Status
+			ctx.networkRequests[idx].Type = string(e.Type)
+			delete(ctx.pendingRequests, string(e.RequestID))
+		}
 		ctx.stateLock.Unlock()
 	})()
 
@@ -321,6 +353,31 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 			}
 			ctx.consoleMessages = remaining
 		}
+	}
+
+	return result
+}
+
+// NetworkRequests returns captured network requests, optionally filtered by URL pattern and method.
+// If clear is true, the buffer is emptied after returning.
+func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) []NetworkRequest {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	var result []NetworkRequest
+	for _, req := range ctx.networkRequests {
+		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
+			continue
+		}
+		if filterMethod != "" && !strings.EqualFold(req.Method, filterMethod) {
+			continue
+		}
+		result = append(result, req)
+	}
+
+	if clear {
+		ctx.networkRequests = nil
+		ctx.pendingRequests = nil
 	}
 
 	return result
