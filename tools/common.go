@@ -223,7 +223,10 @@ var (
 var (
 	NavigationHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			url := request.Params.Arguments["url"].(string)
+			url, err := getStringArg(request.Params.Arguments, "url")
+			if err != nil {
+				return toolErr("navigate", err)
+			}
 			if !utils.IsHttp(url) {
 				return nil, toolError("navigate", fmt.Errorf("invalid URL: %s", url))
 			}
@@ -298,7 +301,10 @@ var (
 			if err != nil {
 				return toolErr("press key", err)
 			}
-			keyStr := request.Params.Arguments["key"].(string)
+			keyStr, err := getStringArg(request.Params.Arguments, "key")
+			if err != nil {
+				return toolErr("press key", err)
+			}
 			key, err := parseKey(keyStr)
 			if err != nil {
 				return toolErr("parse key "+keyStr, err)
@@ -326,7 +332,10 @@ var (
 			if err != nil {
 				return toolErr("evaluate", err)
 			}
-			script := request.Params.Arguments["script"].(string)
+			script, err := getStringArg(request.Params.Arguments, "script")
+			if err != nil {
+				return toolErr("evaluate", err)
+			}
 			r, err := proto.RuntimeEvaluate{
 				Expression:            script,
 				ObjectGroup:           "console",
@@ -352,7 +361,10 @@ var (
 			if err != nil {
 				return toolErr("capture screenshot", err)
 			}
-			name := request.Params.Arguments["name"].(string)
+			name, err := getStringArg(request.Params.Arguments, "name")
+			if err != nil {
+				return toolErr("screenshot", err)
+			}
 
 			// Always save to file
 			cfg := rodCtx.Config()
@@ -387,7 +399,10 @@ var (
 			if err != nil {
 				return toolErr("read PDF data", err)
 			}
-			name := request.Params.Arguments["name"].(string)
+			name, err := getStringArg(request.Params.Arguments, "name")
+			if err != nil {
+				return toolErr("generate PDF", err)
+			}
 
 			// Always save to file, never return inline (PDFs can't be rendered inline by MCP clients)
 			cfg := rodCtx.Config()
@@ -427,18 +442,19 @@ var (
 			if err != nil {
 				return toolErr("resize viewport", err)
 			}
-			width := int(request.Params.Arguments["width"].(float64))
-			height := int(request.Params.Arguments["height"].(float64))
-
-			deviceScaleFactor := 1.0
-			if dsf, ok := request.Params.Arguments["device_scale_factor"].(float64); ok {
-				deviceScaleFactor = dsf
+			widthF, err := getFloatArg(request.Params.Arguments, "width")
+			if err != nil {
+				return toolErr("resize viewport", err)
 			}
-
-			mobile := false
-			if m, ok := request.Params.Arguments["is_mobile"].(bool); ok {
-				mobile = m
+			heightF, err := getFloatArg(request.Params.Arguments, "height")
+			if err != nil {
+				return toolErr("resize viewport", err)
 			}
+			width := int(widthF)
+			height := int(heightF)
+
+			deviceScaleFactor := getOptionalFloatArg(request.Params.Arguments, "device_scale_factor", 1.0)
+			mobile := getOptionalBoolArg(request.Params.Arguments, "is_mobile", false)
 
 			err = proto.EmulationSetDeviceMetricsOverride{
 				Width:             width,
@@ -460,7 +476,10 @@ var (
 				return toolErr("handle dialog", err)
 			}
 
-			action := request.Params.Arguments["action"].(string)
+			action, err := getStringArg(request.Params.Arguments, "action")
+			if err != nil {
+				return toolErr("handle dialog", err)
+			}
 			if action != "accept" && action != "dismiss" {
 				return nil, errors.New("action must be 'accept' or 'dismiss'")
 			}
@@ -521,7 +540,11 @@ var (
 	}
 	TabSelectHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			index := int(request.Params.Arguments["index"].(float64))
+			indexF, err := getFloatArg(request.Params.Arguments, "index")
+			if err != nil {
+				return toolErr("select tab", err)
+			}
+			index := int(indexF)
 			page, err := rodCtx.SelectTab(index)
 			if err != nil {
 				return toolErr("select tab", err)
@@ -536,7 +559,11 @@ var (
 	}
 	TabCloseHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			index := int(request.Params.Arguments["index"].(float64))
+			indexF, err := getFloatArg(request.Params.Arguments, "index")
+			if err != nil {
+				return toolErr("close tab", err)
+			}
+			index := int(indexF)
 			if err := rodCtx.CloseTab(index); err != nil {
 				return toolErr("close tab", err)
 			}

@@ -41,8 +41,14 @@ var (
 				return toolErr("vision click", err)
 			}
 
-			x := request.Params.Arguments["x"].(float64)
-			y := request.Params.Arguments["y"].(float64)
+			x, err := getFloatArg(request.Params.Arguments, "x")
+			if err != nil {
+				return toolErr("vision click", err)
+			}
+			y, err := getFloatArg(request.Params.Arguments, "y")
+			if err != nil {
+				return toolErr("vision click", err)
+			}
 
 			if err = page.Mouse.MoveTo(proto.Point{X: x, Y: y}); err != nil {
 				return toolErr(fmt.Sprintf("vision click move to (%.0f, %.0f)", x, y), err)
@@ -64,9 +70,18 @@ var (
 				return toolErr("vision fill", err)
 			}
 
-			x := request.Params.Arguments["x"].(float64)
-			y := request.Params.Arguments["y"].(float64)
-			text := request.Params.Arguments["text"].(string)
+			x, err := getFloatArg(request.Params.Arguments, "x")
+			if err != nil {
+				return toolErr("vision fill", err)
+			}
+			y, err := getFloatArg(request.Params.Arguments, "y")
+			if err != nil {
+				return toolErr("vision fill", err)
+			}
+			text, err := getStringArg(request.Params.Arguments, "text")
+			if err != nil {
+				return toolErr("vision fill", err)
+			}
 
 			// Click to focus the input
 			if err = page.Mouse.MoveTo(proto.Point{X: x, Y: y}); err != nil {
