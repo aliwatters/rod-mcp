@@ -109,6 +109,7 @@ const (
 	EvaluateToolKey     = "rod_evaluate"
 	CloseBrowserToolKey = "rod_close_browser"
 	SetHeadersToolKey   = "rod_set_headers"
+	ResizeToolKey       = "rod_resize"
 )
 
 var (
@@ -150,6 +151,13 @@ var (
 	SetHeaders = mcp.NewTool(SetHeadersToolKey,
 		mcp.WithDescription("Set extra HTTP headers for all requests. Useful for authentication, bypassing Cloudflare/Vercel protection, or custom headers."),
 		mcp.WithObject("headers", mcp.Description("Headers as key-value pairs, e.g. {\"Authorization\": \"Bearer token\", \"X-Custom-Header\": \"value\"}"), mcp.Required()),
+	)
+	Resize = mcp.NewTool(ResizeToolKey,
+		mcp.WithDescription("Set the browser viewport dimensions for responsive testing and layout control"),
+		mcp.WithNumber("width", mcp.Description("Viewport width in pixels"), mcp.Required()),
+		mcp.WithNumber("height", mcp.Description("Viewport height in pixels"), mcp.Required()),
+		mcp.WithNumber("device_scale_factor", mcp.Description("Device pixel ratio (default: 1)")),
+		mcp.WithBoolean("is_mobile", mcp.Description("Emulate mobile viewport (default: false)")),
 	)
 )
 
@@ -384,6 +392,40 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	ResizeHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			page, err := rodCtx.EnsurePage()
+			if err != nil {
+				log.Errorf("Failed to resize viewport: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to resize viewport: %s", err.Error()))
+			}
+			width := int(request.Params.Arguments["width"].(float64))
+			height := int(request.Params.Arguments["height"].(float64))
+
+			deviceScaleFactor := 1.0
+			if dsf, ok := request.Params.Arguments["device_scale_factor"].(float64); ok {
+				deviceScaleFactor = dsf
+			}
+
+			mobile := false
+			if m, ok := request.Params.Arguments["is_mobile"].(bool); ok {
+				mobile = m
+			}
+
+			err = proto.EmulationSetDeviceMetricsOverride{
+				Width:             width,
+				Height:            height,
+				DeviceScaleFactor: deviceScaleFactor,
+				Mobile:            mobile,
+			}.Call(page)
+			if err != nil {
+				log.Errorf("Failed to resize viewport: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to resize viewport: %s", err.Error()))
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Viewport resized to %dx%d (scale: %.1f, mobile: %t)", width, height, deviceScaleFactor, mobile)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -398,6 +440,7 @@ var (
 		Evaluate,
 		CloseBrowser,
 		SetHeaders,
+		Resize,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -410,5 +453,6 @@ var (
 		EvaluateToolKey:     EvaluateHandler,
 		CloseBrowserToolKey: CloseBrowserHandler,
 		SetHeadersToolKey:   SetHeadersHandler,
+		ResizeToolKey:       ResizeHandler,
 	}
 )
