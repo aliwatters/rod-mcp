@@ -130,7 +130,7 @@ var (
 		mcp.WithString("key", mcp.Description("Name of the key to press or a character to generate, such as `ArrowLeft` or `a`"), mcp.Required()),
 	)
 	Pdf = mcp.NewTool(PdfToolKey,
-		mcp.WithDescription("Generate a PDF of the current page and return as base64 data"),
+		mcp.WithDescription("Generate a PDF of the current page and save to the output directory"),
 		mcp.WithString("name", mcp.Description("Name or description of the PDF"), mcp.Required()),
 	)
 	CloseBrowser = mcp.NewTool(CloseBrowserToolKey,
@@ -307,9 +307,25 @@ var (
 				log.Errorf("Failed to screenshot: %s", err.Error())
 				return nil, errors.New(fmt.Sprintf("Failed to capture screenshot: %s", err.Error()))
 			}
-			fileName := request.Params.Arguments["name"].(string)
-			encoded := base64.StdEncoding.EncodeToString(bin)
-			return mcp.NewToolResultImage(fmt.Sprintf("Screenshot captured: %s", fileName), encoded, "image/png"), nil
+			name := request.Params.Arguments["name"].(string)
+
+			// Always save to file
+			cfg := rodCtx.Config()
+			path, err := types.SaveOutput(cfg, bin, "screenshot", "png")
+			if err != nil {
+				log.Errorf("Failed to save screenshot: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to save screenshot: %s", err.Error()))
+			}
+
+			// Return file path + optional inline image
+			if cfg.ImageResponses != types.ImageResponsesOmit {
+				encoded := base64.StdEncoding.EncodeToString(bin)
+				return mcp.NewToolResultImage(
+					fmt.Sprintf("Screenshot saved: %s (%s)", name, path),
+					encoded, "image/png",
+				), nil
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Screenshot saved: %s (%s)", name, path)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
@@ -331,15 +347,15 @@ var (
 				return nil, errors.New(fmt.Sprintf("Failed to read PDF data: %s", err.Error()))
 			}
 			name := request.Params.Arguments["name"].(string)
-			encoded := base64.StdEncoding.EncodeToString(bin)
-			return mcp.NewToolResultResource(
-				fmt.Sprintf("PDF generated: %s", name),
-				mcp.BlobResourceContents{
-					URI:      fmt.Sprintf("pdf://%s", name),
-					MIMEType: "application/pdf",
-					Blob:     encoded,
-				},
-			), nil
+
+			// Always save to file, never return inline (PDFs can't be rendered inline by MCP clients)
+			cfg := rodCtx.Config()
+			path, err := types.SaveOutput(cfg, bin, "page", "pdf")
+			if err != nil {
+				log.Errorf("Failed to save PDF: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to save PDF: %s", err.Error()))
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("PDF saved: %s (%s)", name, path)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
