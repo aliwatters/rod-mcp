@@ -108,8 +108,9 @@ const (
 	ScreenshotToolKey   = "rod_screenshot"
 	EvaluateToolKey     = "rod_evaluate"
 	CloseBrowserToolKey = "rod_close_browser"
-	SetHeadersToolKey   = "rod_set_headers"
-	ResizeToolKey       = "rod_resize"
+	SetHeadersToolKey    = "rod_set_headers"
+	ResizeToolKey        = "rod_resize"
+	HandleDialogToolKey  = "rod_handle_dialog"
 )
 
 var (
@@ -158,6 +159,11 @@ var (
 		mcp.WithNumber("height", mcp.Description("Viewport height in pixels"), mcp.Required()),
 		mcp.WithNumber("device_scale_factor", mcp.Description("Device pixel ratio (default: 1)")),
 		mcp.WithBoolean("is_mobile", mcp.Description("Emulate mobile viewport (default: false)")),
+	)
+	HandleDialog = mcp.NewTool(HandleDialogToolKey,
+		mcp.WithDescription("Handle a JavaScript dialog (alert, confirm, prompt). Use this when a dialog is blocking page interaction."),
+		mcp.WithString("action", mcp.Description("accept or dismiss"), mcp.Required()),
+		mcp.WithString("text", mcp.Description("Text to enter for prompt() dialogs before accepting")),
 	)
 )
 
@@ -426,6 +432,37 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	HandleDialogHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			page, err := rodCtx.ControlledPage()
+			if err != nil {
+				log.Errorf("Failed to handle dialog: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to handle dialog: %s", err.Error()))
+			}
+
+			action := request.Params.Arguments["action"].(string)
+			if action != "accept" && action != "dismiss" {
+				return nil, errors.New("action must be 'accept' or 'dismiss'")
+			}
+
+			accept := action == "accept"
+			promptText := ""
+			if t, ok := request.Params.Arguments["text"].(string); ok {
+				promptText = t
+			}
+
+			err = proto.PageHandleJavaScriptDialog{
+				Accept:     accept,
+				PromptText: promptText,
+			}.Call(page)
+			if err != nil {
+				log.Errorf("Failed to handle dialog: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to handle dialog: %s", err.Error()))
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Dialog %sed successfully", action)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -441,6 +478,7 @@ var (
 		CloseBrowser,
 		SetHeaders,
 		Resize,
+		HandleDialog,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -453,6 +491,7 @@ var (
 		EvaluateToolKey:     EvaluateHandler,
 		CloseBrowserToolKey: CloseBrowserHandler,
 		SetHeadersToolKey:   SetHeadersHandler,
-		ResizeToolKey:       ResizeHandler,
+		ResizeToolKey:        ResizeHandler,
+		HandleDialogToolKey: HandleDialogHandler,
 	}
 )
