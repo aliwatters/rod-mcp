@@ -11,6 +11,11 @@ func TestPdfToolDefinition(t *testing.T) {
 		t.Errorf("Pdf tool name = %q, want %q", Pdf.Name, PdfToolKey)
 	}
 
+	// Verify description mentions saving to output directory
+	if Pdf.Description != "Generate a PDF of the current page and save to the output directory" {
+		t.Errorf("Pdf tool description = %q, want file-based description", Pdf.Description)
+	}
+
 	// Verify "name" parameter exists and is required
 	props := Pdf.InputSchema.Properties
 	if props == nil {

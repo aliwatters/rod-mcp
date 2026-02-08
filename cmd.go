@@ -15,6 +15,8 @@ type SubCfg struct {
 	Mode            types.Mode
 	CDPEndpoint     string
 	CompactSnapshot bool
+	OutputDir       string
+	OmitImages      bool
 }
 
 func RunCmd() (*SubCfg, error) {
@@ -58,6 +60,15 @@ func RunCmd() (*SubCfg, error) {
 				Aliases: []string{"cs"},
 				Usage:   "enable compact snapshot mode to reduce token usage by filtering non-interactive elements",
 			},
+			&cli.StringFlag{
+				Name:        "output-dir",
+				Usage:       "directory for saving screenshots and PDFs (default: OS temp dir)",
+				Destination: &subConfig.OutputDir,
+			},
+			&cli.BoolFlag{
+				Name:    "omit-images",
+				Usage:   "omit inline base64 image data from screenshot results (saves tokens)",
+			},
 		},
 		Before: func(c *cli.Context) error {
 			if !c.Bool("no-banner") {
@@ -76,6 +87,9 @@ func RunCmd() (*SubCfg, error) {
 			}
 			if c.Bool("compact-snapshot") {
 				subConfig.CompactSnapshot = true
+			}
+			if c.Bool("omit-images") {
+				subConfig.OmitImages = true
 			}
 			return nil
 		},
