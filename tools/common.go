@@ -120,6 +120,7 @@ const (
 	TabListToolKey       = "rod_tab_list"
 	TabSelectToolKey     = "rod_tab_select"
 	TabCloseToolKey      = "rod_tab_close"
+	WaitForToolKey       = "rod_wait_for"
 )
 
 var (
@@ -188,6 +189,13 @@ var (
 	TabClose = mcp.NewTool(TabCloseToolKey,
 		mcp.WithDescription("Close a browser tab by index"),
 		mcp.WithNumber("index", mcp.Description("Tab index to close (from rod_tab_list)"), mcp.Required()),
+	)
+	WaitFor = mcp.NewTool(WaitForToolKey,
+		mcp.WithDescription("Wait for a condition on the page: a CSS selector to appear/disappear, or text to become visible"),
+		mcp.WithString("selector", mcp.Description("CSS selector to wait for")),
+		mcp.WithString("text", mcp.Description("Text content to wait for on the page")),
+		mcp.WithString("state", mcp.Description("Element state to wait for: visible (default), hidden, attached, detached")),
+		mcp.WithNumber("timeout", mcp.Description("Max wait time in milliseconds (default: 30000)")),
 	)
 )
 
@@ -515,6 +523,88 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	WaitForHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			page, err := rodCtx.ControlledPage()
+			if err != nil {
+				return toolErr("wait for condition", err)
+			}
+
+			selector, _ := request.Params.Arguments["selector"].(string)
+			text, _ := request.Params.Arguments["text"].(string)
+			state, _ := request.Params.Arguments["state"].(string)
+
+			if selector == "" && text == "" {
+				return nil, errors.New("either 'selector' or 'text' is required")
+			}
+
+			if state == "" {
+				state = "visible"
+			}
+
+			timeout := 30000.0
+			if t, ok := request.Params.Arguments["timeout"].(float64); ok && t > 0 {
+				timeout = t
+			}
+			timedPage := page.Timeout(time.Duration(timeout) * time.Millisecond)
+
+			if text != "" {
+				el, err := timedPage.ElementR("*", text)
+				if err != nil {
+					return toolErr(fmt.Sprintf("wait for text %q", text), err)
+				}
+				if err = el.WaitVisible(); err != nil {
+					return toolErr(fmt.Sprintf("wait for text %q to be visible", text), err)
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Text %q found and visible", text)), nil
+			}
+
+			switch state {
+			case "visible":
+				el, err := timedPage.Element(selector)
+				if err != nil {
+					return toolErr(fmt.Sprintf("wait for %q", selector), err)
+				}
+				if err = el.WaitVisible(); err != nil {
+					return toolErr(fmt.Sprintf("wait for %q to be visible", selector), err)
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Element %q is visible", selector)), nil
+
+			case "hidden":
+				el, err := timedPage.Element(selector)
+				if err != nil {
+					return toolErr(fmt.Sprintf("wait for %q", selector), err)
+				}
+				if err = el.WaitInvisible(); err != nil {
+					return toolErr(fmt.Sprintf("wait for %q to be hidden", selector), err)
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Element %q is hidden", selector)), nil
+
+			case "attached":
+				if _, err := timedPage.Element(selector); err != nil {
+					return toolErr(fmt.Sprintf("wait for %q to be attached", selector), err)
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Element %q is attached to DOM", selector)), nil
+
+			case "detached":
+				script := fmt.Sprintf(`() => new Promise((resolve) => {
+					const check = () => {
+						if (!document.querySelector(%q)) { resolve(true); return; }
+						requestAnimationFrame(check);
+					};
+					check();
+				})`, selector)
+				if _, err := timedPage.Eval(script); err != nil {
+					return toolErr(fmt.Sprintf("wait for %q to be detached", selector), err)
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Element %q is detached from DOM", selector)), nil
+
+			default:
+				return nil, fmt.Errorf("invalid state %q: must be visible, hidden, attached, or detached", state)
+			}
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -535,6 +625,7 @@ var (
 		TabList,
 		TabSelect,
 		TabClose,
+		WaitFor,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -553,5 +644,6 @@ var (
 		TabListToolKey:      TabListHandler,
 		TabSelectToolKey:    TabSelectHandler,
 		TabCloseToolKey:     TabCloseHandler,
+		WaitForToolKey:      WaitForHandler,
 	}
 )
