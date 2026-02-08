@@ -36,7 +36,7 @@ func launchBrowser(ctx context.Context, cfg Config) (*rod.Browser, error) {
 		NoSandbox(cfg.NoSandbox).
 		Set("no-gpu").
 		Set("--no-first-run").
-		Set("ignore-certificate-errors", "true").
+		Set("ignore-certificate-errors").
 		Set("disable-xss-auditor", "true").
 		Set("disable-popup-blocking").
 		Set("mute-audio", "true").
@@ -81,6 +81,9 @@ func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error
 			return nil, errors.Wrap(err, "in connect browser stage to close browser happened err")
 		}
 		return nil, errors.Wrap(err, "Error connecting to browser")
+	}
+	if err := browser.IgnoreCertErrors(true); err != nil {
+		return nil, errors.Wrap(err, "failed to set ignore certificate errors")
 	}
 	return browser, nil
 }
