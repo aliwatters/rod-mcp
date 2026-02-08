@@ -3,15 +3,16 @@ package tools
 import (
 	"context"
 	"fmt"
+
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
-	"github.com/aliwatters/rod-mcp/types"
-	"github.com/aliwatters/rod-mcp/utils"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/pkg/errors"
+
+	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/utils"
 )
 
 const (
@@ -52,40 +53,33 @@ var (
 		handler := func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			snapshot, err := rodCtx.BuildSnapshot()
 			if err != nil {
-				return nil, errors.Wrapf(err, "Failed to capture snapshot")
+				return toolErr("capture snapshot", err)
 			}
-
 			return mcp.NewToolResultText(snapshot), nil
-
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, err := rodCtx.ControlledPage()
 			ele := request.Params.Arguments["element"].(string)
+			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to click element: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to click element %s: %s", ele, err.Error()))
+				return toolErr("click element "+ele, err)
 			}
 
 			snapshot, err := rodCtx.LatestSnapshot()
 			if err != nil {
-				log.Errorf("Failed to get snapshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to click element %s: %s", ele, err.Error()))
+				return toolErr("click element "+ele, err)
 			}
 
 			ref := request.Params.Arguments["ref"].(string)
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
-				log.Errorf("Failed to find frame %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to click element %s: %s", ele, err.Error()))
+				return toolErr("click element "+ele, err)
 			}
-			err = element.Click(proto.InputMouseButtonLeft, 1)
-			if err != nil {
-				log.Errorf("Failed to click element %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to click element %s: %s", ele, err.Error()))
+			if err = element.Click(proto.InputMouseButtonLeft, 1); err != nil {
+				return toolErr("click element "+ele, err)
 			}
 
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
@@ -96,45 +90,36 @@ var (
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, err := rodCtx.ControlledPage()
 			ele := request.Params.Arguments["element"].(string)
+			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to fill out element %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to fill out element %s : %s", ele, err.Error()))
+				return toolErr("fill element "+ele, err)
 			}
 
 			snapshot, err := rodCtx.LatestSnapshot()
 			if err != nil {
-				log.Errorf("Failed to get snapshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to fill out element %s : %s", ele, err.Error()))
+				return toolErr("fill element "+ele, err)
 			}
 
 			ref := request.Params.Arguments["ref"].(string)
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
-				log.Errorf("Failed to find frame %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to fill out element %s: %s", ele, err.Error()))
+				return toolErr("fill element "+ele, err)
 			}
 
 			value := request.Params.Arguments["value"].(string)
 			// Clear existing value by selecting all text first, then input new value
 			// This ensures password fields and React-controlled inputs work correctly
-			err = element.SelectAllText()
-			if err != nil {
-				log.Warnf("Failed to select all text in element %s (may be empty): %s", ele, err.Error())
+			if err = element.SelectAllText(); err != nil {
+				log.Warnf("Failed to select all text in element %s (may be empty): %s", ele, err)
 				// Continue anyway - field may be empty or select may not be supported
 			}
-			err = element.Input(value)
-
-			if err != nil {
-				log.Errorf("Failed to fill out element %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to fill out element %s: %s", ele, err.Error()))
+			if err = element.Input(value); err != nil {
+				return toolErr("fill element "+ele, err)
 			}
 			if submit, ok := request.Params.Arguments["submit"].(bool); ok && submit {
-				err = element.Page().Keyboard.Press(input.Enter)
-				if err != nil {
-					log.Errorf("Failed to submit element %s: %s", ele, err.Error())
-					return nil, errors.New(fmt.Sprintf("Failed to submit element %s: %s", ele, err.Error()))
+				if err = element.Page().Keyboard.Press(input.Enter); err != nil {
+					return toolErr("submit element "+ele, err)
 				}
 			}
 
@@ -146,34 +131,28 @@ var (
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, err := rodCtx.ControlledPage()
 			ele := request.Params.Arguments["element"].(string)
+			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to select option in element %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select option(s) in element %s : %s", ele, err.Error()))
+				return toolErr("select option in element "+ele, err)
 			}
 
 			snapshot, err := rodCtx.LatestSnapshot()
 			if err != nil {
-				log.Errorf("Failed to get snapshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select option(s) in element %s : %s", ele, err.Error()))
+				return toolErr("select option in element "+ele, err)
 			}
 
 			ref := request.Params.Arguments["ref"].(string)
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
-				log.Errorf("Failed to find frame %s: %s", ele, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select option(s) in element %s: %s", ele, err.Error()))
+				return toolErr("select option in element "+ele, err)
 			}
 			values, err := utils.OptionalStringArrayParam(request, "values")
 			if err != nil {
-				log.Errorf("Failed to get values: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select option(s) in element %s: %s", ele, err.Error()))
+				return toolErr("select option in element "+ele, err)
 			}
-			err = element.Select(values, true, rod.SelectorTypeText)
-			if err != nil {
-				log.Errorf("Failed to select option(s) in element %s: %s", ref, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select option(s) in element %s: %s", ele, err.Error()))
+			if err = element.Select(values, true, rod.SelectorTypeText); err != nil {
+				return toolErr("select option in element "+ele, err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Select option(s) in element %s successfully", ele)), nil

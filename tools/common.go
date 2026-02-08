@@ -18,6 +18,11 @@ import (
 	"github.com/aliwatters/rod-mcp/utils"
 )
 
+// toolErr creates a nil result + toolError pair for handler return statements.
+func toolErr(action string, err error) (*mcp.CallToolResult, error) {
+	return nil, toolError(action, err)
+}
+
 const (
 	defaultWaitStableDur = 1 * time.Second
 	defaultDomDiff       = 0.2
@@ -191,25 +196,21 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			url := request.Params.Arguments["url"].(string)
 			if !utils.IsHttp(url) {
-				log.Errorf("Invalid URL: %s", url)
-				return nil, errors.New("invalid URL")
+				return nil, toolError("navigate", fmt.Errorf("invalid URL: %s", url))
 			}
 
 			page, err := rodCtx.EnsurePage()
 			if err != nil {
-				log.Errorf("Failed to navigate to %s: %s", url, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to navigate to %s: %s", url, err.Error()))
+				return toolErr("navigate to "+url, err)
 			}
 
 			// Update headers for the target URL (applies domain-specific headers from config)
 			if err := rodCtx.UpdateHeadersForURL(url); err != nil {
-				log.Warnf("Failed to update headers for %s: %s", url, err.Error())
+				log.Warnf("Failed to update headers for %s: %s", url, err)
 			}
 
-			err = page.Navigate(url)
-			if err != nil {
-				log.Errorf("Failed to navigate to %s: %s", url, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to navigate to %s: %s", url, err.Error()))
+			if err = page.Navigate(url); err != nil {
+				return toolErr("navigate to "+url, err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Navigated to %s", url)), nil
@@ -221,13 +222,10 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to go back: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to go back: %s", err.Error()))
+				return toolErr("go back", err)
 			}
-			err = page.NavigateBack()
-			if err != nil {
-				log.Errorf("Failed to go back: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to go back: %s", err.Error()))
+			if err = page.NavigateBack(); err != nil {
+				return toolErr("go back", err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Go back successfully"), nil
@@ -239,13 +237,10 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to go forward: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to go forward: %s", err.Error()))
+				return toolErr("go forward", err)
 			}
-			err = page.NavigateForward()
-			if err != nil {
-				log.Errorf("Failed to go forward: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to go forward: %s", err.Error()))
+			if err = page.NavigateForward(); err != nil {
+				return toolErr("go forward", err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Go forward successfully"), nil
@@ -257,13 +252,10 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to reload current page: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to reload current page: %s", err.Error()))
+				return toolErr("reload page", err)
 			}
-			err = page.Reload()
-			if err != nil {
-				log.Errorf("Failed to reload current page: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to reload current page: %s", err.Error()))
+			if err = page.Reload(); err != nil {
+				return toolErr("reload page", err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText("Reload current page successfully"), nil
@@ -275,19 +267,15 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to press key: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to press key: %s", err.Error()))
+				return toolErr("press key", err)
 			}
 			keyStr := request.Params.Arguments["key"].(string)
 			key, err := parseKey(keyStr)
 			if err != nil {
-				log.Errorf("Failed to parse key %s: %s", keyStr, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to parse key %s: %s", keyStr, err.Error()))
+				return toolErr("parse key "+keyStr, err)
 			}
-			err = page.Keyboard.Press(key)
-			if err != nil {
-				log.Errorf("Failed to press key %s: %s", keyStr, err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to press key %s: %s", keyStr, err.Error()))
+			if err = page.Keyboard.Press(key); err != nil {
+				return toolErr("press key "+keyStr, err)
 			}
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Press key %s successfully", keyStr)), nil
@@ -296,10 +284,8 @@ var (
 	}
 	CloseBrowserHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			err := rodCtx.CloseBrowser()
-			if err != nil {
-				log.Errorf("Failed to close browser: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to close browser: %s", err.Error()))
+			if err := rodCtx.CloseBrowser(); err != nil {
+				return toolErr("close browser", err)
 			}
 			return mcp.NewToolResultText("Close browser successfully"), nil
 		}
@@ -309,7 +295,7 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to evaluate: %s", err.Error())
+				return toolErr("evaluate", err)
 			}
 			script := request.Params.Arguments["script"].(string)
 			r, err := proto.RuntimeEvaluate{
@@ -318,8 +304,7 @@ var (
 				IncludeCommandLineAPI: true,
 			}.Call(page)
 			if err != nil {
-				log.Errorf("Failed to evaluate code: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to evaluate code: %s", err.Error()))
+				return toolErr("evaluate code", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Evaluate code successfully with result: %s", r.Result.Value.String())), nil
 		}
@@ -329,16 +314,14 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to screenshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to screenshot: %s", err.Error()))
+				return toolErr("screenshot", err)
 			}
 			req := &proto.PageCaptureScreenshot{
 				Format: proto.PageCaptureScreenshotFormatPng,
 			}
 			bin, err := page.Screenshot(false, req)
 			if err != nil {
-				log.Errorf("Failed to screenshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to capture screenshot: %s", err.Error()))
+				return toolErr("capture screenshot", err)
 			}
 			name := request.Params.Arguments["name"].(string)
 
@@ -346,8 +329,7 @@ var (
 			cfg := rodCtx.Config()
 			path, err := types.SaveOutput(cfg, bin, "screenshot", "png")
 			if err != nil {
-				log.Errorf("Failed to save screenshot: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to save screenshot: %s", err.Error()))
+				return toolErr("save screenshot", err)
 			}
 
 			// Return file path + optional inline image
@@ -366,18 +348,15 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to generate PDF: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to generate PDF: %s", err.Error()))
+				return toolErr("generate PDF", err)
 			}
 			reader, err := page.PDF(&proto.PagePrintToPDF{})
 			if err != nil {
-				log.Errorf("Failed to generate PDF: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to generate PDF: %s", err.Error()))
+				return toolErr("generate PDF", err)
 			}
 			bin, err := io.ReadAll(reader)
 			if err != nil {
-				log.Errorf("Failed to read PDF data: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to read PDF data: %s", err.Error()))
+				return toolErr("read PDF data", err)
 			}
 			name := request.Params.Arguments["name"].(string)
 
@@ -385,8 +364,7 @@ var (
 			cfg := rodCtx.Config()
 			path, err := types.SaveOutput(cfg, bin, "page", "pdf")
 			if err != nil {
-				log.Errorf("Failed to save PDF: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to save PDF: %s", err.Error()))
+				return toolErr("save PDF", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("PDF saved: %s (%s)", name, path)), nil
 		}
@@ -396,8 +374,7 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.EnsurePage()
 			if err != nil {
-				log.Errorf("Failed to set headers: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to set headers: %s", err.Error()))
+				return toolErr("set headers", err)
 			}
 			headersArg := request.Params.Arguments["headers"]
 			headersMap, ok := headersArg.(map[string]interface{})
@@ -408,10 +385,8 @@ var (
 			for k, v := range headersMap {
 				headers = append(headers, k, fmt.Sprintf("%v", v))
 			}
-			_, err = page.SetExtraHeaders(headers)
-			if err != nil {
-				log.Errorf("Failed to set headers: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to set headers: %s", err.Error()))
+			if _, err = page.SetExtraHeaders(headers); err != nil {
+				return toolErr("set headers", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Set %d headers successfully", len(headersMap))), nil
 		}
@@ -421,8 +396,7 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.EnsurePage()
 			if err != nil {
-				log.Errorf("Failed to resize viewport: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to resize viewport: %s", err.Error()))
+				return toolErr("resize viewport", err)
 			}
 			width := int(request.Params.Arguments["width"].(float64))
 			height := int(request.Params.Arguments["height"].(float64))
@@ -444,8 +418,7 @@ var (
 				Mobile:            mobile,
 			}.Call(page)
 			if err != nil {
-				log.Errorf("Failed to resize viewport: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to resize viewport: %s", err.Error()))
+				return toolErr("resize viewport", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Viewport resized to %dx%d (scale: %.1f, mobile: %t)", width, height, deviceScaleFactor, mobile)), nil
 		}
@@ -455,8 +428,7 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
-				log.Errorf("Failed to handle dialog: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to handle dialog: %s", err.Error()))
+				return toolErr("handle dialog", err)
 			}
 
 			action := request.Params.Arguments["action"].(string)
@@ -475,8 +447,7 @@ var (
 				PromptText: promptText,
 			}.Call(page)
 			if err != nil {
-				log.Errorf("Failed to handle dialog: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to handle dialog: %s", err.Error()))
+				return toolErr("handle dialog", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Dialog %sed successfully", action)), nil
 		}
@@ -489,12 +460,10 @@ var (
 				url = u
 			}
 			if url != "" && !utils.IsHttp(url) {
-				return nil, errors.New("invalid URL")
+				return nil, toolError("create new tab", fmt.Errorf("invalid URL: %s", url))
 			}
-			_, err := rodCtx.NewTab(url)
-			if err != nil {
-				log.Errorf("Failed to create new tab: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to create new tab: %s", err.Error()))
+			if _, err := rodCtx.NewTab(url); err != nil {
+				return toolErr("create new tab", err)
 			}
 			if url != "" {
 				return mcp.NewToolResultText(fmt.Sprintf("New tab opened and navigated to %s", url)), nil
@@ -507,8 +476,7 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			tabs, err := rodCtx.ListTabs()
 			if err != nil {
-				log.Errorf("Failed to list tabs: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to list tabs: %s", err.Error()))
+				return toolErr("list tabs", err)
 			}
 			var result string
 			for _, tab := range tabs {
@@ -527,8 +495,7 @@ var (
 			index := int(request.Params.Arguments["index"].(float64))
 			page, err := rodCtx.SelectTab(index)
 			if err != nil {
-				log.Errorf("Failed to select tab: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to select tab: %s", err.Error()))
+				return toolErr("select tab", err)
 			}
 			info, err := page.Info()
 			if err != nil {
@@ -541,10 +508,8 @@ var (
 	TabCloseHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			index := int(request.Params.Arguments["index"].(float64))
-			err := rodCtx.CloseTab(index)
-			if err != nil {
-				log.Errorf("Failed to close tab: %s", err.Error())
-				return nil, errors.New(fmt.Sprintf("Failed to close tab: %s", err.Error()))
+			if err := rodCtx.CloseTab(index); err != nil {
+				return toolErr("close tab", err)
 			}
 			return mcp.NewToolResultText(fmt.Sprintf("Tab %d closed", index)), nil
 		}
