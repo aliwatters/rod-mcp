@@ -6,6 +6,98 @@ import (
 	"github.com/go-rod/rod/lib/input"
 )
 
+func TestPdfToolDefinition(t *testing.T) {
+	if Pdf.Name != PdfToolKey {
+		t.Errorf("Pdf tool name = %q, want %q", Pdf.Name, PdfToolKey)
+	}
+
+	// Verify "name" parameter exists and is required
+	props := Pdf.InputSchema.Properties
+	if props == nil {
+		t.Fatal("Pdf tool has no properties")
+	}
+	if _, ok := props["name"]; !ok {
+		t.Error("Pdf tool missing 'name' property")
+	}
+
+	// Verify old file_path/file_name params are removed
+	if _, ok := props["file_path"]; ok {
+		t.Error("Pdf tool should not have 'file_path' property")
+	}
+	if _, ok := props["file_name"]; ok {
+		t.Error("Pdf tool should not have 'file_name' property")
+	}
+
+	// Verify "name" is required
+	required := Pdf.InputSchema.Required
+	found := false
+	for _, r := range required {
+		if r == "name" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Pdf tool 'name' parameter should be required")
+	}
+}
+
+func TestPdfToolRegistered(t *testing.T) {
+	// Verify Pdf is in CommonTools
+	found := false
+	for _, tool := range CommonTools {
+		if tool.Name == PdfToolKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Pdf tool not found in CommonTools")
+	}
+
+	// Verify PdfHandler is in CommonToolHandlers
+	if _, ok := CommonToolHandlers[PdfToolKey]; !ok {
+		t.Error("PdfHandler not found in CommonToolHandlers")
+	}
+}
+
+func TestAllCommonToolsHaveHandlers(t *testing.T) {
+	for _, tool := range CommonTools {
+		if _, ok := CommonToolHandlers[tool.Name]; !ok {
+			t.Errorf("Tool %q registered in CommonTools but missing from CommonToolHandlers", tool.Name)
+		}
+	}
+}
+
+func TestAllCommonHandlersHaveTools(t *testing.T) {
+	toolNames := make(map[string]bool)
+	for _, tool := range CommonTools {
+		toolNames[tool.Name] = true
+	}
+	for name := range CommonToolHandlers {
+		if !toolNames[name] {
+			t.Errorf("Handler %q registered in CommonToolHandlers but missing from CommonTools", name)
+		}
+	}
+}
+
+func TestTextToolsIncludesPdf(t *testing.T) {
+	found := false
+	for _, tool := range TextTools {
+		if tool.Name == PdfToolKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Pdf tool not found in TextTools (should be included via CommonTools)")
+	}
+
+	if _, ok := TextToolHandlers[PdfToolKey]; !ok {
+		t.Error("PdfHandler not found in TextToolHandlers (should be included via CommonToolHandlers)")
+	}
+}
+
 func TestParseKey(t *testing.T) {
 	tests := []struct {
 		name    string
