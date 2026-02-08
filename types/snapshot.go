@@ -356,6 +356,9 @@ func truncateScalar(value string, maxLen int) string {
 }
 
 func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {
+	if len(s.frames) == 0 {
+		return nil, errors.New("no frames available in snapshot")
+	}
 	frame := s.frames[0]
 	matches := regexp.MustCompile(`^f(\d+)(.*)`).FindStringSubmatch(ref)
 	if len(matches) > 0 {
@@ -364,8 +367,8 @@ func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {
 			return nil, errors.Wrapf(err, "locator frame failed, because of frame index is not number")
 		}
 
-		if frameIndex < 0 || frameIndex > len(s.frames) {
-			return nil, errors.Errorf("locator frame failed, because of frame index is out of range")
+		if frameIndex < 0 || frameIndex >= len(s.frames) {
+			return nil, errors.Errorf("frame index %d out of range (0-%d)", frameIndex, len(s.frames)-1)
 		}
 		frame = s.frames[frameIndex]
 		ref = matches[2]
