@@ -69,7 +69,10 @@ var (
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele := request.Params.Arguments["element"].(string)
+			ele, err := getStringArg(request.Params.Arguments, "element")
+			if err != nil {
+				return toolErr("click element", err)
+			}
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("click element "+ele, err)
@@ -80,7 +83,10 @@ var (
 				return toolErr("click element "+ele, err)
 			}
 
-			ref := request.Params.Arguments["ref"].(string)
+			ref, err := getStringArg(request.Params.Arguments, "ref")
+			if err != nil {
+				return toolErr("click element "+ele, err)
+			}
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
 				return toolErr("click element "+ele, err)
@@ -97,7 +103,10 @@ var (
 
 	HoverHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele := request.Params.Arguments["element"].(string)
+			ele, err := getStringArg(request.Params.Arguments, "element")
+			if err != nil {
+				return toolErr("hover element", err)
+			}
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("hover element "+ele, err)
@@ -108,7 +117,10 @@ var (
 				return toolErr("hover element "+ele, err)
 			}
 
-			ref := request.Params.Arguments["ref"].(string)
+			ref, err := getStringArg(request.Params.Arguments, "ref")
+			if err != nil {
+				return toolErr("hover element "+ele, err)
+			}
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
 				return toolErr("hover element "+ele, err)
@@ -125,7 +137,10 @@ var (
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele := request.Params.Arguments["element"].(string)
+			ele, err := getStringArg(request.Params.Arguments, "element")
+			if err != nil {
+				return toolErr("fill element", err)
+			}
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("fill element "+ele, err)
@@ -136,13 +151,19 @@ var (
 				return toolErr("fill element "+ele, err)
 			}
 
-			ref := request.Params.Arguments["ref"].(string)
+			ref, err := getStringArg(request.Params.Arguments, "ref")
+			if err != nil {
+				return toolErr("fill element "+ele, err)
+			}
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
 				return toolErr("fill element "+ele, err)
 			}
 
-			value := request.Params.Arguments["value"].(string)
+			value, err := getStringArg(request.Params.Arguments, "value")
+			if err != nil {
+				return toolErr("fill element "+ele, err)
+			}
 			// Clear existing value by selecting all text first, then input new value
 			// This ensures password fields and React-controlled inputs work correctly
 			if err = element.SelectAllText(); err != nil {
@@ -166,7 +187,10 @@ var (
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele := request.Params.Arguments["element"].(string)
+			ele, err := getStringArg(request.Params.Arguments, "element")
+			if err != nil {
+				return toolErr("select option", err)
+			}
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("select option in element "+ele, err)
@@ -177,7 +201,10 @@ var (
 				return toolErr("select option in element "+ele, err)
 			}
 
-			ref := request.Params.Arguments["ref"].(string)
+			ref, err := getStringArg(request.Params.Arguments, "ref")
+			if err != nil {
+				return toolErr("select option in element "+ele, err)
+			}
 			element, err := snapshot.LocatorInFrame(ref)
 			if err != nil {
 				return toolErr("select option in element "+ele, err)

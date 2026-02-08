@@ -7,18 +7,12 @@ import (
 )
 
 type Runner struct {
-	ctx    context.Context
-	rodCtx *types.Context
 	server *Server
 }
 
 func NewRunner(ctx context.Context, cfg types.Config) *Runner {
-	rodCtx := types.NewContext(ctx, cfg)
-	server := NewServer(ctx, cfg)
 	return &Runner{
-		ctx:    ctx,
-		rodCtx: rodCtx,
-		server: server,
+		server: NewServer(ctx, cfg),
 	}
 }
 
