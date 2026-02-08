@@ -161,6 +161,10 @@ func (ctx *Context) CurrentMode() Mode {
 	return ctx.mode
 }
 
+func (ctx *Context) Config() Config {
+	return ctx.config
+}
+
 func (ctx *Context) ClosePage() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
