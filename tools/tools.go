@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/charmbracelet/log"
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aliwatters/rod-mcp/types"
@@ -17,6 +18,53 @@ func toolError(action string, err error) error {
 	log.Errorf("Failed to %s: %s", action, err)
 	return fmt.Errorf("Failed to %s: %s", action, err)
 }
+
+var (
+	CommonTools = []mcp.Tool{
+		Navigation,
+		GoBack,
+		GoForward,
+		Reload,
+		PressKey,
+		Screenshot,
+		Pdf,
+		Evaluate,
+		CloseBrowser,
+		SetHeaders,
+		Resize,
+		HandleDialog,
+		TabNew,
+		TabList,
+		TabSelect,
+		TabClose,
+		WaitFor,
+		ConsoleMessages,
+		FileUpload,
+		NetworkRequests,
+	}
+	CommonToolHandlers = map[string]ToolHandler{
+		NavigationToolKey:      NavigationHandler,
+		GoBackToolKey:          GoBackHandler,
+		GoForwardToolKey:       GoForwardHandler,
+		ReloadToolKey:          ReloadHandler,
+		PressKeyToolKey:        PressKeyHandler,
+		ScreenshotToolKey:      ScreenshotHandler,
+		PdfToolKey:             PdfHandler,
+		EvaluateToolKey:        EvaluateHandler,
+		CloseBrowserToolKey:    CloseBrowserHandler,
+		SetHeadersToolKey:      SetHeadersHandler,
+		ResizeToolKey:          ResizeHandler,
+		HandleDialogToolKey:    HandleDialogHandler,
+		TabNewToolKey:          TabNewHandler,
+		TabListToolKey:         TabListHandler,
+		TabSelectToolKey:       TabSelectHandler,
+		TabCloseToolKey:        TabCloseHandler,
+		WaitForToolKey:         WaitForHandler,
+		ConsoleMessagesToolKey: ConsoleMessagesHandler,
+		FileUploadToolKey:      FileUploadHandler,
+		NetworkRequestsToolKey: NetworkRequestsHandler,
+	}
+)
 
 var (
 	TextTools        = append(CommonTools, Snapshots...)

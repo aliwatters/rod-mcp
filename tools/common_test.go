@@ -159,3 +159,41 @@ func TestParseKey(t *testing.T) {
 		})
 	}
 }
+
+func TestScreenshotToolHasNoUnusedParams(t *testing.T) {
+	props := Screenshot.InputSchema.Properties
+	if props == nil {
+		t.Fatal("Screenshot tool has no properties")
+	}
+
+	// Should only have "name" parameter
+	if _, ok := props["selector"]; ok {
+		t.Error("Screenshot tool should not have unused 'selector' parameter")
+	}
+	if _, ok := props["width"]; ok {
+		t.Error("Screenshot tool should not have unused 'width' parameter")
+	}
+	if _, ok := props["height"]; ok {
+		t.Error("Screenshot tool should not have unused 'height' parameter")
+	}
+	if _, ok := props["name"]; !ok {
+		t.Error("Screenshot tool should have 'name' parameter")
+	}
+}
+
+func TestNavigationUsesToolKey(t *testing.T) {
+	if Navigation.Name != NavigationToolKey {
+		t.Errorf("Navigation tool name = %q, want %q (should use NavigationToolKey constant)", Navigation.Name, NavigationToolKey)
+	}
+}
+
+func TestReloadNaming(t *testing.T) {
+	if Reload.Name != ReloadToolKey {
+		t.Errorf("Reload tool name = %q, want %q", Reload.Name, ReloadToolKey)
+	}
+
+	// Verify handler is registered with correct key
+	if _, ok := CommonToolHandlers[ReloadToolKey]; !ok {
+		t.Error("ReloadHandler not found in CommonToolHandlers")
+	}
+}
