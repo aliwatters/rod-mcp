@@ -21,4 +21,7 @@ func toolError(action string, err error) error {
 var (
 	TextTools        = append(CommonTools, Snapshots...)
 	TextToolHandlers = utils.MergeMaps(CommonToolHandlers, SnapshotToolHandlers)
+
+	VisionTools            = append(CommonTools, VisionToolDefs...)
+	VisionCombinedHandlers = utils.MergeMaps(CommonToolHandlers, VisionToolHandlers)
 )
