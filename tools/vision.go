@@ -57,7 +57,7 @@ var (
 				return toolErr(fmt.Sprintf("vision click at (%.0f, %.0f)", x, y), err)
 			}
 
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Clicked at (%.0f, %.0f) successfully", x, y)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
@@ -102,7 +102,7 @@ var (
 				}
 			}
 
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Filled text at (%.0f, %.0f) successfully", x, y)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})

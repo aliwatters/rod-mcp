@@ -69,33 +69,15 @@ var (
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele, err := getStringArg(request.Params.Arguments, "element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "click element")
 			if err != nil {
 				return toolErr("click element", err)
-			}
-			page, err := rodCtx.ControlledPage()
-			if err != nil {
-				return toolErr("click element "+ele, err)
-			}
-
-			snapshot, err := rodCtx.LatestSnapshot()
-			if err != nil {
-				return toolErr("click element "+ele, err)
-			}
-
-			ref, err := getStringArg(request.Params.Arguments, "ref")
-			if err != nil {
-				return toolErr("click element "+ele, err)
-			}
-			element, err := snapshot.LocatorInFrame(ref)
-			if err != nil {
-				return toolErr("click element "+ele, err)
 			}
 			if err = element.Click(proto.InputMouseButtonLeft, 1); err != nil {
 				return toolErr("click element "+ele, err)
 			}
 
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Click element %s successfully", ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
@@ -103,33 +85,15 @@ var (
 
 	HoverHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele, err := getStringArg(request.Params.Arguments, "element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "hover element")
 			if err != nil {
 				return toolErr("hover element", err)
-			}
-			page, err := rodCtx.ControlledPage()
-			if err != nil {
-				return toolErr("hover element "+ele, err)
-			}
-
-			snapshot, err := rodCtx.LatestSnapshot()
-			if err != nil {
-				return toolErr("hover element "+ele, err)
-			}
-
-			ref, err := getStringArg(request.Params.Arguments, "ref")
-			if err != nil {
-				return toolErr("hover element "+ele, err)
-			}
-			element, err := snapshot.LocatorInFrame(ref)
-			if err != nil {
-				return toolErr("hover element "+ele, err)
 			}
 			if err = element.Hover(); err != nil {
 				return toolErr("hover element "+ele, err)
 			}
 
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Hover element %s successfully", ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
@@ -137,27 +101,9 @@ var (
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele, err := getStringArg(request.Params.Arguments, "element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "fill element")
 			if err != nil {
 				return toolErr("fill element", err)
-			}
-			page, err := rodCtx.ControlledPage()
-			if err != nil {
-				return toolErr("fill element "+ele, err)
-			}
-
-			snapshot, err := rodCtx.LatestSnapshot()
-			if err != nil {
-				return toolErr("fill element "+ele, err)
-			}
-
-			ref, err := getStringArg(request.Params.Arguments, "ref")
-			if err != nil {
-				return toolErr("fill element "+ele, err)
-			}
-			element, err := snapshot.LocatorInFrame(ref)
-			if err != nil {
-				return toolErr("fill element "+ele, err)
 			}
 
 			value, err := getStringArg(request.Params.Arguments, "value")
@@ -179,7 +125,7 @@ var (
 				}
 			}
 
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Fill out element %s successfully", ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
@@ -187,27 +133,9 @@ var (
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			ele, err := getStringArg(request.Params.Arguments, "element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "select option in element")
 			if err != nil {
 				return toolErr("select option", err)
-			}
-			page, err := rodCtx.ControlledPage()
-			if err != nil {
-				return toolErr("select option in element "+ele, err)
-			}
-
-			snapshot, err := rodCtx.LatestSnapshot()
-			if err != nil {
-				return toolErr("select option in element "+ele, err)
-			}
-
-			ref, err := getStringArg(request.Params.Arguments, "ref")
-			if err != nil {
-				return toolErr("select option in element "+ele, err)
-			}
-			element, err := snapshot.LocatorInFrame(ref)
-			if err != nil {
-				return toolErr("select option in element "+ele, err)
 			}
 			values, err := utils.OptionalStringArrayParam(request, "values")
 			if err != nil {
@@ -216,7 +144,7 @@ var (
 			if err = element.Select(values, true, rod.SelectorTypeText); err != nil {
 				return toolErr("select option in element "+ele, err)
 			}
-			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Select option(s) in element %s successfully", ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
