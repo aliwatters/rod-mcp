@@ -96,14 +96,21 @@ const (
 	Text Mode = "text"
 )
 
+// ConsoleMessage represents a captured browser console message.
+type ConsoleMessage struct {
+	Level string `json:"level"`
+	Text  string `json:"text"`
+}
+
 type Context struct {
-	stdContext context.Context
-	config     Config
-	browser    *rod.Browser
-	page      *rod.Page
-	stateLock sync.Mutex
-	snapshot  *Snapshot
-	mode       Mode
+	stdContext       context.Context
+	config          Config
+	browser         *rod.Browser
+	page            *rod.Page
+	stateLock       sync.Mutex
+	snapshot        *Snapshot
+	mode            Mode
+	consoleMessages []ConsoleMessage
 }
 
 func NewContext(ctx context.Context, cfg Config) *Context {
@@ -270,7 +277,53 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
+	// Listen for console messages
+	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
+		var parts []string
+		for _, arg := range e.Args {
+			parts = append(parts, arg.Value.String())
+		}
+		text := strings.Join(parts, " ")
+		ctx.stateLock.Lock()
+		ctx.consoleMessages = append(ctx.consoleMessages, ConsoleMessage{
+			Level: string(e.Type),
+			Text:  text,
+		})
+		ctx.stateLock.Unlock()
+	})()
+
 	return page, nil
+}
+
+// ConsoleMessages returns captured console messages, optionally filtered by level.
+// If clear is true, the buffer is emptied after returning.
+func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMessage {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	var result []ConsoleMessage
+	for _, msg := range ctx.consoleMessages {
+		if filterLevel == "" || msg.Level == filterLevel {
+			result = append(result, msg)
+		}
+	}
+
+	if clear {
+		if filterLevel == "" {
+			ctx.consoleMessages = nil
+		} else {
+			// Only clear matching messages
+			var remaining []ConsoleMessage
+			for _, msg := range ctx.consoleMessages {
+				if msg.Level != filterLevel {
+					remaining = append(remaining, msg)
+				}
+			}
+			ctx.consoleMessages = remaining
+		}
+	}
+
+	return result
 }
 
 // TabInfo represents a tab's metadata for listing.

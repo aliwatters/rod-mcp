@@ -120,7 +120,8 @@ const (
 	TabListToolKey       = "rod_tab_list"
 	TabSelectToolKey     = "rod_tab_select"
 	TabCloseToolKey      = "rod_tab_close"
-	WaitForToolKey       = "rod_wait_for"
+	WaitForToolKey          = "rod_wait_for"
+	ConsoleMessagesToolKey  = "rod_console_messages"
 )
 
 var (
@@ -196,6 +197,11 @@ var (
 		mcp.WithString("text", mcp.Description("Text content to wait for on the page")),
 		mcp.WithString("state", mcp.Description("Element state to wait for: visible (default), hidden, attached, detached")),
 		mcp.WithNumber("timeout", mcp.Description("Max wait time in milliseconds (default: 30000)")),
+	)
+	ConsoleMessages = mcp.NewTool(ConsoleMessagesToolKey,
+		mcp.WithDescription("Return captured browser console messages (log, warn, error, info)"),
+		mcp.WithString("level", mcp.Description("Filter by level: log, warn, error, info (returns all if not specified)")),
+		mcp.WithBoolean("clear", mcp.Description("Clear captured messages after returning (default: false)")),
 	)
 )
 
@@ -605,6 +611,25 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	ConsoleMessagesHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			filterLevel, _ := request.Params.Arguments["level"].(string)
+			clear, _ := request.Params.Arguments["clear"].(bool)
+
+			messages := rodCtx.ConsoleMessages(filterLevel, clear)
+			if len(messages) == 0 {
+				return mcp.NewToolResultText("No console messages captured"), nil
+			}
+
+			var result string
+			for _, msg := range messages {
+				result += fmt.Sprintf("[%s] %s\n", msg.Level, msg.Text)
+			}
+			result += fmt.Sprintf("\nTotal: %d messages", len(messages))
+			return mcp.NewToolResultText(result), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -626,6 +651,7 @@ var (
 		TabSelect,
 		TabClose,
 		WaitFor,
+		ConsoleMessages,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -644,6 +670,7 @@ var (
 		TabListToolKey:      TabListHandler,
 		TabSelectToolKey:    TabSelectHandler,
 		TabCloseToolKey:     TabCloseHandler,
-		WaitForToolKey:      WaitForHandler,
+		WaitForToolKey:         WaitForHandler,
+		ConsoleMessagesToolKey: ConsoleMessagesHandler,
 	}
 )
