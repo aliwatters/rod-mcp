@@ -42,6 +42,14 @@ func main() {
 		cfg.CompactSnapshot = true
 	}
 
+	if subCfg.OutputDir != "" {
+		cfg.OutputDir = subCfg.OutputDir
+	}
+
+	if subCfg.OmitImages {
+		cfg.ImageResponses = types.ImageResponsesOmit
+	}
+
 	runner := NewRunner(ctx, *cfg)
 	go func() {
 		c := make(chan os.Signal, 1)
