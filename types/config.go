@@ -11,6 +11,16 @@ import (
 
 const ConfigName = "rod-mcp.yaml"
 
+// ImageResponsesMode controls whether inline base64 image data is included in tool results.
+type ImageResponsesMode string
+
+const (
+	// ImageResponsesAllow includes inline base64 image data alongside the saved file path.
+	ImageResponsesAllow ImageResponsesMode = "allow"
+	// ImageResponsesOmit returns only the file path, omitting inline base64 data to save tokens.
+	ImageResponsesOmit ImageResponsesMode = "omit"
+)
+
 type Config struct {
 	Mode             Mode              `yaml:"mode" json:"mode"`
 	CDPEndpoint      string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
@@ -28,6 +38,13 @@ type Config struct {
 	// Patterns support wildcards: "*.example.com" matches "www.example.com", "api.example.com", etc.
 	// Headers from matching patterns are merged with ExtraHTTPHeaders.
 	DomainHeaders map[string]map[string]string `yaml:"domainHeaders" json:"domainHeaders"`
+	// OutputDir is the directory where screenshots and PDFs are saved.
+	// Defaults to a "rod-mcp" subdirectory in the OS temp directory.
+	OutputDir string `yaml:"outputDir" json:"outputDir"`
+	// ImageResponses controls whether inline base64 image data is included in screenshot results.
+	// "allow" (default): saves file and includes inline base64 ImageContent.
+	// "omit": saves file only, returns just the file path (saves tokens).
+	ImageResponses ImageResponsesMode `yaml:"imageResponses" json:"imageResponses"`
 }
 
 var (
@@ -43,6 +60,7 @@ var (
 		ServerName:     DefaultServerName,
 		LoggerConfig:   DefaultLoggerConfig,
 		Mode:           Text,
+		ImageResponses: ImageResponsesAllow,
 	}
 )
 
