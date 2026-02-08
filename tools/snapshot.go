@@ -18,6 +18,7 @@ import (
 const (
 	SnapshotToolKey = "rod_snapshot"
 	ClickToolKey    = "rod_click"
+	HoverToolKey    = "rod_hover"
 	FillToolKey     = "rod_fill"
 	SelectorToolKey = "rod_selector"
 )
@@ -29,6 +30,12 @@ var (
 
 	Click = mcp.NewTool(ClickToolKey,
 		mcp.WithDescription("Perform click on a web page"),
+		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
+	)
+
+	Hover = mcp.NewTool(HoverToolKey,
+		mcp.WithDescription("Hover over an element to trigger CSS :hover states, tooltips, or dropdown menus"),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
 	)
@@ -84,6 +91,34 @@ var (
 
 			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
 			return mcp.NewToolResultText(fmt.Sprintf("Click element %s successfully", ele)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
+	}
+
+	HoverHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			ele := request.Params.Arguments["element"].(string)
+			page, err := rodCtx.ControlledPage()
+			if err != nil {
+				return toolErr("hover element "+ele, err)
+			}
+
+			snapshot, err := rodCtx.LatestSnapshot()
+			if err != nil {
+				return toolErr("hover element "+ele, err)
+			}
+
+			ref := request.Params.Arguments["ref"].(string)
+			element, err := snapshot.LocatorInFrame(ref)
+			if err != nil {
+				return toolErr("hover element "+ele, err)
+			}
+			if err = element.Hover(); err != nil {
+				return toolErr("hover element "+ele, err)
+			}
+
+			page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff)
+			return mcp.NewToolResultText(fmt.Sprintf("Hover element %s successfully", ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
@@ -165,12 +200,14 @@ var (
 	SnapshotToolHandlers = map[string]ToolHandler{
 		SnapshotToolKey: SnapshotHandler,
 		ClickToolKey:    ClickHandler,
+		HoverToolKey:    HoverHandler,
 		FillToolKey:     FillHandler,
 		SelectorToolKey: SelectorHandler,
 	}
 	Snapshots = []mcp.Tool{
 		Snapshot,
 		Click,
+		Hover,
 		Fill,
 		Selector,
 	}
