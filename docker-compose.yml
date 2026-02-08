@@ -1,0 +1,9 @@
+services:
+  rod-mcp:
+    build:
+      context: .
+      args:
+        VERSION: dev
+    volumes:
+      - ./rod-mcp.yaml:/app/rod-mcp.yaml:ro
+    stdin_open: true
