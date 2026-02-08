@@ -52,6 +52,26 @@ go mod tidy
 go build
 ```
 
+### Docker
+
+Build and run with Docker:
+
+```bash
+docker build -t rod-mcp .
+```
+
+The container runs headless with `--no-sandbox` by default via the baked-in `rod-mcp.yaml`. To supply your own config, mount it as a volume:
+
+```bash
+docker run -i --rm -v ./rod-mcp.yaml:/app/rod-mcp.yaml:ro rod-mcp
+```
+
+Or use Docker Compose:
+
+```bash
+docker compose up --build
+```
+
 ## Usage
 
 ### Basic Usage
