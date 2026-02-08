@@ -111,6 +111,10 @@ const (
 	SetHeadersToolKey    = "rod_set_headers"
 	ResizeToolKey        = "rod_resize"
 	HandleDialogToolKey  = "rod_handle_dialog"
+	TabNewToolKey        = "rod_tab_new"
+	TabListToolKey       = "rod_tab_list"
+	TabSelectToolKey     = "rod_tab_select"
+	TabCloseToolKey      = "rod_tab_close"
 )
 
 var (
@@ -164,6 +168,21 @@ var (
 		mcp.WithDescription("Handle a JavaScript dialog (alert, confirm, prompt). Use this when a dialog is blocking page interaction."),
 		mcp.WithString("action", mcp.Description("accept or dismiss"), mcp.Required()),
 		mcp.WithString("text", mcp.Description("Text to enter for prompt() dialogs before accepting")),
+	)
+	TabNew = mcp.NewTool(TabNewToolKey,
+		mcp.WithDescription("Open a new browser tab, optionally navigating to a URL"),
+		mcp.WithString("url", mcp.Description("URL to navigate to in the new tab")),
+	)
+	TabList = mcp.NewTool(TabListToolKey,
+		mcp.WithDescription("List all open browser tabs with their titles, URLs, and which is active"),
+	)
+	TabSelect = mcp.NewTool(TabSelectToolKey,
+		mcp.WithDescription("Switch to a specific browser tab by index"),
+		mcp.WithNumber("index", mcp.Description("Tab index (from rod_tab_list)"), mcp.Required()),
+	)
+	TabClose = mcp.NewTool(TabCloseToolKey,
+		mcp.WithDescription("Close a browser tab by index"),
+		mcp.WithNumber("index", mcp.Description("Tab index to close (from rod_tab_list)"), mcp.Required()),
 	)
 )
 
@@ -463,6 +482,74 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	TabNewHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			url := ""
+			if u, ok := request.Params.Arguments["url"].(string); ok {
+				url = u
+			}
+			if url != "" && !utils.IsHttp(url) {
+				return nil, errors.New("invalid URL")
+			}
+			_, err := rodCtx.NewTab(url)
+			if err != nil {
+				log.Errorf("Failed to create new tab: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to create new tab: %s", err.Error()))
+			}
+			if url != "" {
+				return mcp.NewToolResultText(fmt.Sprintf("New tab opened and navigated to %s", url)), nil
+			}
+			return mcp.NewToolResultText("New tab opened"), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
+	TabListHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			tabs, err := rodCtx.ListTabs()
+			if err != nil {
+				log.Errorf("Failed to list tabs: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to list tabs: %s", err.Error()))
+			}
+			var result string
+			for _, tab := range tabs {
+				active := ""
+				if tab.IsActive {
+					active = " (active)"
+				}
+				result += fmt.Sprintf("[%d] %s - %s%s\n", tab.Index, tab.Title, tab.URL, active)
+			}
+			return mcp.NewToolResultText(result), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
+	TabSelectHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			index := int(request.Params.Arguments["index"].(float64))
+			page, err := rodCtx.SelectTab(index)
+			if err != nil {
+				log.Errorf("Failed to select tab: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to select tab: %s", err.Error()))
+			}
+			info, err := page.Info()
+			if err != nil {
+				return mcp.NewToolResultText(fmt.Sprintf("Switched to tab %d", index)), nil
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Switched to tab %d: %s - %s", index, info.Title, info.URL)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
+	}
+	TabCloseHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			index := int(request.Params.Arguments["index"].(float64))
+			err := rodCtx.CloseTab(index)
+			if err != nil {
+				log.Errorf("Failed to close tab: %s", err.Error())
+				return nil, errors.New(fmt.Sprintf("Failed to close tab: %s", err.Error()))
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Tab %d closed", index)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -479,6 +566,10 @@ var (
 		SetHeaders,
 		Resize,
 		HandleDialog,
+		TabNew,
+		TabList,
+		TabSelect,
+		TabClose,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -493,5 +584,9 @@ var (
 		SetHeadersToolKey:   SetHeadersHandler,
 		ResizeToolKey:        ResizeHandler,
 		HandleDialogToolKey: HandleDialogHandler,
+		TabNewToolKey:       TabNewHandler,
+		TabListToolKey:      TabListHandler,
+		TabSelectToolKey:    TabSelectHandler,
+		TabCloseToolKey:     TabCloseHandler,
 	}
 )
