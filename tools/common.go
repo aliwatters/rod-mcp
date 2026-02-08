@@ -124,6 +124,7 @@ const (
 	WaitForToolKey          = "rod_wait_for"
 	ConsoleMessagesToolKey  = "rod_console_messages"
 	FileUploadToolKey       = "rod_file_upload"
+	NetworkRequestsToolKey  = "rod_network_requests"
 )
 
 var (
@@ -210,6 +211,12 @@ var (
 		mcp.WithString("selector", mcp.Description("CSS selector of the file input element")),
 		mcp.WithString("ref", mcp.Description("Element reference from the page snapshot")),
 		mcp.WithArray("paths", mcp.Description("File paths to upload"), mcp.Items(map[string]interface{}{"type": "string"}), mcp.Required()),
+	)
+	NetworkRequests = mcp.NewTool(NetworkRequestsToolKey,
+		mcp.WithDescription("Return captured network requests with method, URL, status code, and resource type"),
+		mcp.WithString("url", mcp.Description("Filter requests by URL substring")),
+		mcp.WithString("method", mcp.Description("Filter by HTTP method: GET, POST, etc.")),
+		mcp.WithBoolean("clear", mcp.Description("Clear captured requests after returning (default: false)")),
 	)
 )
 
@@ -686,6 +693,26 @@ var (
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
+	NetworkRequestsHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			filterURL, _ := request.Params.Arguments["url"].(string)
+			filterMethod, _ := request.Params.Arguments["method"].(string)
+			clear, _ := request.Params.Arguments["clear"].(bool)
+
+			requests := rodCtx.NetworkRequests(filterURL, filterMethod, clear)
+			if len(requests) == 0 {
+				return mcp.NewToolResultText("No network requests captured"), nil
+			}
+
+			var result string
+			for _, req := range requests {
+				result += fmt.Sprintf("%s %s → %d (%s)\n", req.Method, req.URL, req.Status, req.Type)
+			}
+			result += fmt.Sprintf("\nTotal: %d requests", len(requests))
+			return mcp.NewToolResultText(result), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	}
 )
 
 var (
@@ -709,6 +736,7 @@ var (
 		WaitFor,
 		ConsoleMessages,
 		FileUpload,
+		NetworkRequests,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		NavigationToolKey:   NavigationHandler,
@@ -730,5 +758,6 @@ var (
 		WaitForToolKey:         WaitForHandler,
 		ConsoleMessagesToolKey: ConsoleMessagesHandler,
 		FileUploadToolKey:      FileUploadHandler,
+		NetworkRequestsToolKey: NetworkRequestsHandler,
 	}
 )
