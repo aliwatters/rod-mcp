@@ -1,12 +1,14 @@
 package types
 
 import (
-	"github.com/aliwatters/rod-mcp/utils"
-	"github.com/pkg/errors"
-	"gopkg.in/yaml.v3"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/aliwatters/rod-mcp/utils"
+	"github.com/pkg/errors"
+	"gopkg.in/yaml.v3"
 )
 
 const ConfigName = "rod-mcp.yaml"
@@ -105,26 +107,28 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, errors.Wrap(err, "could not open config file")
 	}
 
-	if exist {
-		// validate config file name
-		fileName := utils.FileName(configPath)
-		if strings.Contains(ConfigName, fileName) {
-			file, err := os.Open(configPath)
-			if err != nil {
-				return nil, err
-			}
-			defer file.Close()
-
-			decoder := yaml.NewDecoder(file)
-			var config Config
-			if err := decoder.Decode(&config); err != nil {
-				return nil, err
-			}
-			return &config, nil
-		}
-		return nil, errors.Wrapf(err, "config file name is wrong")
+	if !exist {
+		return nil, fmt.Errorf("config path %s not found", configPath)
 	}
-	return nil, errors.Wrapf(err, "config path %s not found", configPath)
+
+	// validate config file name
+	fileName := utils.FileName(configPath)
+	if fileName != ConfigName {
+		return nil, fmt.Errorf("config file name is wrong: expected %s, got %s", ConfigName, fileName)
+	}
+
+	file, err := os.Open(configPath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	decoder := yaml.NewDecoder(file)
+	var config Config
+	if err := decoder.Decode(&config); err != nil {
+		return nil, err
+	}
+	return &config, nil
 }
 
 // GetHeadersForURL returns all headers that should be applied for the given URL.

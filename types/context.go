@@ -76,11 +76,11 @@ func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error
 	browser := rod.New().Context(ctx)
 	err := browser.ControlURL(controlURL).Connect()
 	if err != nil {
-		err := browser.Close()
-		if err != nil {
-			return nil, errors.Wrap(err, "in connect browser stage to close browser happened err")
+		closeErr := browser.Close()
+		if closeErr != nil {
+			return nil, errors.Wrap(closeErr, "close browser after connect failure")
 		}
-		return nil, errors.Wrap(err, "Error connecting to browser")
+		return nil, errors.Wrap(err, "error connecting to browser")
 	}
 	return browser, nil
 }
@@ -171,7 +171,7 @@ func (ctx *Context) initial() error {
 		}
 	}
 
-	return err
+	return nil
 
 }
 
@@ -252,7 +252,7 @@ func (ctx *Context) closePage() error {
 		return errors.Wrap(err, "close page failed")
 	}
 	ctx.page = nil
-	return err
+	return nil
 }
 func (ctx *Context) closeBrowser() error {
 	err := ctx.closePage()
@@ -275,9 +275,11 @@ func (ctx *Context) closeBrowser() error {
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	targetURL := strings.Join(urls, "/")
 	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
-	page.EvalOnNewDocument(js.InjectedSnapShot)
 	if err != nil {
 		return nil, errors.Wrap(err, "create page failed")
+	}
+	if _, err := page.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
+		return nil, errors.Wrap(err, "inject snapshot script failed")
 	}
 
 	// Apply HTTP headers from config (global + domain-specific)
@@ -529,7 +531,9 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 func (ctx *Context) Close() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-	ctx.closeBrowser()
+	if err := ctx.closeBrowser(); err != nil {
+		log.Warnf("close browser: %s", err)
+	}
 
 	// remove browser temp dir
 	if ctx.config.BrowserTempDir != "" && ctx.config.CDPEndpoint == "" {
