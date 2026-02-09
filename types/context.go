@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/aliwatters/rod-mcp/types/js"
@@ -538,11 +539,20 @@ func (ctx *Context) Close() error {
 		log.Warnf("close browser: %s", err)
 	}
 
-	// remove browser temp dir
+	// remove browser temp dir, retrying briefly to handle race with browser shutdown
 	if ctx.config.BrowserTempDir != "" && ctx.config.CDPEndpoint == "" {
-		err := os.RemoveAll(ctx.config.BrowserTempDir)
-		if err != nil {
-			return errors.Wrap(err, "remove browser temp dir failed")
+		var lastErr error
+		for range 3 {
+			if err := os.RemoveAll(ctx.config.BrowserTempDir); err == nil {
+				lastErr = nil
+				break
+			} else {
+				lastErr = err
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+		if lastErr != nil {
+			log.Warnf("remove browser temp dir: %s", lastErr)
 		}
 	}
 	return nil

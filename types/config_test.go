@@ -90,14 +90,14 @@ func TestGetHeadersForURL(t *testing.T) {
 		{
 			"https://www.myapp.org/page",
 			map[string]string{
-				"X-Global":            "global-value",
+				"X-Global":       "global-value",
 				"X-Bypass-Token": "secret123",
 			},
 		},
 		{
 			"https://www.myapp.test/page",
 			map[string]string{
-				"X-Global":            "global-value",
+				"X-Global":       "global-value",
 				"X-Bypass-Token": "test-secret",
 			},
 		},
