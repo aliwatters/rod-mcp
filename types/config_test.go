@@ -1,6 +1,50 @@
 package types
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestLoadConfigMergesDefaults(t *testing.T) {
+	// Write a minimal config with only mode set
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "minimal.yaml")
+	if err := os.WriteFile(cfgPath, []byte("mode: vision\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if cfg.ServerName != DefaultServerName {
+		t.Errorf("ServerName = %q, want %q (from DefaultConfig)", cfg.ServerName, DefaultServerName)
+	}
+	if cfg.Mode != Vision {
+		t.Errorf("Mode = %q, want %q (from YAML)", cfg.Mode, Vision)
+	}
+	if cfg.ImageResponses != ImageResponsesAllow {
+		t.Errorf("ImageResponses = %q, want %q (from DefaultConfig)", cfg.ImageResponses, ImageResponsesAllow)
+	}
+}
+
+func TestLoadConfigAcceptsCustomFilename(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "my-custom-config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("mode: text\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig should accept custom filename, got: %v", err)
+	}
+	if cfg.Mode != Text {
+		t.Errorf("Mode = %q, want %q", cfg.Mode, Text)
+	}
+}
 
 func TestMatchDomainPattern(t *testing.T) {
 	tests := []struct {
