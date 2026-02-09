@@ -51,5 +51,16 @@ debug/
 # Build output directory
 build/
 dist/ 
-# Claude Code commands (synced globally via ~/.claude/commands/)
-.claude/commands/
+# Claude Code (synced globally via ~/.claude/)
+.claude/
+
+# Workflow and activity state
+.mcp-activity.json
+.workflow-state.*
+.workflow-reports/
+.ax/
+.claude-profile.json
+
+# Node (used for JS minification only)
+node_modules/
+package-lock.json
