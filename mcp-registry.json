@@ -1,0 +1,9 @@
+{
+  "rod-mcp": {
+    "command": "~/.local/libexec/rod-mcp",
+    "args": ["--headless", "--no-banner", "--compact-snapshot", "--config", "~/.config/rod-mcp/rod-mcp.yaml"],
+    "description": "Browser automation with Rod: headless, GUI, or authenticated Chrome sessions. Use rod_configure to switch modes.",
+    "keywords": ["browser", "headless", "gui", "auth", "scrape", "web", "automation", "rod", "navigate"],
+    "category": "browser"
+  }
+}
