@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
-	"github.com/charmbracelet/log"
-	"github.com/aliwatters/rod-mcp/types"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/charmbracelet/log"
+
+	"github.com/aliwatters/rod-mcp/banner"
+	"github.com/aliwatters/rod-mcp/types"
 )
 
 func main() {
@@ -49,6 +52,8 @@ func main() {
 	if subCfg.OmitImages {
 		cfg.ImageResponses = types.ImageResponsesOmit
 	}
+
+	cfg.ServerVersion = banner.Version
 
 	runner := NewRunner(ctx, *cfg)
 	go func() {
