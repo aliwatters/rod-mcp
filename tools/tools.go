@@ -21,6 +21,7 @@ func toolError(action string, err error) error {
 
 var (
 	CommonTools = []mcp.Tool{
+		Configure,
 		Navigation,
 		GoBack,
 		GoForward,
@@ -43,6 +44,7 @@ var (
 		NetworkRequests,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
+		ConfigureToolKey:       ConfigureHandler,
 		NavigationToolKey:      NavigationHandler,
 		GoBackToolKey:          GoBackHandler,
 		GoForwardToolKey:       GoForwardHandler,

@@ -530,6 +530,24 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 	return nil
 }
 
+// Reconfigure updates browser settings and closes any running browser so the
+// next tool call reinitializes with the new configuration.  Pass nil for any
+// field to leave it unchanged.
+func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string) error {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	if headless != nil {
+		ctx.config.Headless = *headless
+	}
+	if cdpEndpoint != nil {
+		ctx.config.CDPEndpoint = *cdpEndpoint
+	}
+
+	// Close existing browser so the next initial() picks up new config.
+	return ctx.closeBrowser()
+}
+
 // Close the browser
 // PS: This method only used because of server exit
 func (ctx *Context) Close() error {
