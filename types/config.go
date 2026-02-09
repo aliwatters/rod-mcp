@@ -111,12 +111,6 @@ func LoadConfig(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("config path %s not found", configPath)
 	}
 
-	// validate config file name
-	fileName := utils.FileName(configPath)
-	if fileName != ConfigName {
-		return nil, fmt.Errorf("config file name is wrong: expected %s, got %s", ConfigName, fileName)
-	}
-
 	file, err := os.Open(configPath)
 	if err != nil {
 		return nil, err
@@ -124,7 +118,7 @@ func LoadConfig(configPath string) (*Config, error) {
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
-	var config Config
+	config := DefaultConfig
 	if err := decoder.Decode(&config); err != nil {
 		return nil, err
 	}
