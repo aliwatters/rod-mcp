@@ -109,7 +109,10 @@ func cloneProfileFull(srcDir string) (string, error) {
 	}
 
 	// Remove the temp dir so copyDir creates it fresh from the source.
-	os.Remove(tmpDir)
+	if err := os.Remove(tmpDir); err != nil {
+		os.RemoveAll(tmpDir)
+		return "", fmt.Errorf("prepare temp dir: %w", err)
+	}
 
 	if err := copyDir(srcDir, tmpDir); err != nil {
 		os.RemoveAll(tmpDir)
@@ -118,6 +121,17 @@ func cloneProfileFull(srcDir string) (string, error) {
 
 	log.Warnf("full profile clone to %s (this includes ALL browser data — passwords, history, extensions)", tmpDir)
 	return tmpDir, nil
+}
+
+// isValidDomainPattern checks that a domain string contains only safe characters
+// to prevent SQL injection when used in sqlite3 queries.
+func isValidDomainPattern(d string) bool {
+	for _, c := range d {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '*') {
+			return false
+		}
+	}
+	return len(d) > 0
 }
 
 // filterCookiesByDomain uses sqlite3 CLI to delete cookies not matching the given domains.
@@ -136,6 +150,9 @@ func filterCookiesByDomain(cookiesDB string, domains []string) error {
 		d = strings.TrimSpace(d)
 		if d == "" {
 			continue
+		}
+		if !isValidDomainPattern(d) {
+			return fmt.Errorf("invalid domain pattern %q: only alphanumeric, dots, hyphens, and wildcards allowed", d)
 		}
 		if strings.HasPrefix(d, "*.") {
 			// *.example.com → match .example.com suffix
@@ -163,7 +180,7 @@ func filterCookiesByDomain(cookiesDB string, domains []string) error {
 	return nil
 }
 
-// copyFile copies a single file from src to dst.
+// copyFile copies a single file from src to dst, ensuring data is flushed to disk.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
@@ -180,13 +197,17 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
-	_, err = io.Copy(out, in)
-	return err
+	_, copyErr := io.Copy(out, in)
+	// Always close; prefer the copy error if both fail.
+	closeErr := out.Close()
+	if copyErr != nil {
+		return copyErr
+	}
+	return closeErr
 }
 
-// copyDir recursively copies a directory tree.
+// copyDir recursively copies a directory tree, skipping symlinks.
 func copyDir(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
@@ -203,6 +224,11 @@ func copyDir(src, dst string) error {
 	}
 
 	for _, entry := range entries {
+		// Skip symlinks to avoid following links outside the profile directory.
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 

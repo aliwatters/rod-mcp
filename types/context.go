@@ -30,6 +30,14 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		return b, "", err
 	}
 
+	// Validate flag combinations.
+	if cfg.UserDataDir == "" && (cfg.NoClone || cfg.CloneAll || len(cfg.CloneDomains) > 0) {
+		return nil, "", fmt.Errorf("--no-clone, --clone-all, and --clone-domains require --user-data-dir")
+	}
+	if cfg.NoClone && cfg.CloneAll {
+		return nil, "", fmt.Errorf("--no-clone and --clone-all are mutually exclusive")
+	}
+
 	// Determine the user data directory for Chrome.
 	var userDataDir string
 	if cfg.UserDataDir != "" {
