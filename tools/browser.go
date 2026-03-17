@@ -57,8 +57,14 @@ var (
 			if err != nil {
 				return toolErr("evaluate", err)
 			}
+			// Wrap function expressions so they get invoked, not just defined.
+			// e.g. "() => document.title" becomes "(() => document.title)()"
+			expression := script
+			if len(script) > 0 && (script[0] == '(' || len(script) > 8 && script[:8] == "function") {
+				expression = "(" + script + ")()"
+			}
 			r, err := proto.RuntimeEvaluate{
-				Expression:            script,
+				Expression:            expression,
 				ObjectGroup:           "console",
 				IncludeCommandLineAPI: true,
 				ReturnByValue:         true,
