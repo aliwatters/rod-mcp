@@ -14,6 +14,7 @@ type SubCfg struct {
 	ConfigPath      string
 	Mode            types.Mode
 	CDPEndpoint     string
+	ChromeDebugPort string
 	CompactSnapshot bool
 	OutputDir       string
 	OmitImages      bool
@@ -37,6 +38,10 @@ func RunCmd() (*SubCfg, error) {
 				Aliases:     []string{"cdp"},
 				Usage:       "use to control running browser by cdp",
 				Destination: &subConfig.CDPEndpoint,
+			}, &cli.StringFlag{
+				Name:        "chrome-debug-port",
+				Usage:       "launch Chrome with --remote-debugging-port on the given port (e.g. 9222)",
+				Destination: &subConfig.ChromeDebugPort,
 			},
 			&cli.BoolFlag{
 				Name:        "headless",

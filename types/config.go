@@ -26,6 +26,7 @@ const (
 type Config struct {
 	Mode             Mode              `yaml:"mode" json:"mode"`
 	CDPEndpoint      string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
+	ChromeDebugPort  string            `yaml:"chromeDebugPort" json:"chromeDebugPort"`
 	ServerName       string            `yaml:"serverName" json:"serverName"`
 	ServerVersion    string            `yaml:"-" json:"-"`
 	BrowserBinPath   string            `yaml:"browserBinPath" json:"browserBinPath"`
