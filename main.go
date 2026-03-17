@@ -45,6 +45,10 @@ func main() {
 		cfg.ChromeDebugPort = subCfg.ChromeDebugPort
 	}
 
+	if subCfg.UserDataDir != "" {
+		cfg.UserDataDir = subCfg.UserDataDir
+	}
+
 	if subCfg.CompactSnapshot {
 		cfg.CompactSnapshot = true
 	}

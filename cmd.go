@@ -15,6 +15,7 @@ type SubCfg struct {
 	Mode            types.Mode
 	CDPEndpoint     string
 	ChromeDebugPort string
+	UserDataDir     string
 	CompactSnapshot bool
 	OutputDir       string
 	OmitImages      bool
@@ -42,6 +43,10 @@ func RunCmd() (*SubCfg, error) {
 				Name:        "chrome-debug-port",
 				Usage:       "launch Chrome with --remote-debugging-port on the given port (e.g. 9222)",
 				Destination: &subConfig.ChromeDebugPort,
+			}, &cli.StringFlag{
+				Name:        "user-data-dir",
+				Usage:       "use an existing Chrome profile directory (inherits cookies, sessions, auth state)",
+				Destination: &subConfig.UserDataDir,
 			},
 			&cli.BoolFlag{
 				Name:        "headless",

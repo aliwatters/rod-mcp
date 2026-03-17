@@ -26,12 +26,22 @@ func launchBrowser(ctx context.Context, cfg Config) (*rod.Browser, error) {
 		return controlBrowser(ctx, cfg.CDPEndpoint)
 	}
 
-	if cfg.BrowserTempDir == "" {
-		cfg.BrowserTempDir = DefaultBrowserTempDir
+	// Determine the user data directory for Chrome.
+	// If --user-data-dir is set, use the provided path directly (reuses existing profile).
+	// Otherwise, create a unique temp directory for an isolated session.
+	userDataDir := cfg.UserDataDir
+	if userDataDir == "" {
+		if cfg.BrowserTempDir == "" {
+			cfg.BrowserTempDir = DefaultBrowserTempDir
+		}
+		// browser must own a unique temp dir
+		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(10))
+	} else {
+		if _, err := os.Stat(userDataDir); os.IsNotExist(err) {
+			return nil, fmt.Errorf("user-data-dir %q does not exist", userDataDir)
+		}
 	}
 
-	// browser must own a unique temp dir
-	cfg.BrowserTempDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(10))
 	browserLauncher := launcher.New().
 		Context(ctx).
 		Headless(cfg.Headless).
@@ -47,7 +57,7 @@ func launchBrowser(ctx context.Context, cfg Config) (*rod.Browser, error) {
 		Set("--remote-allow-origins", "*").
 		Set("--disable-dev-shm-usage").
 		Set("--disable-features", "HttpsUpgrades").
-		UserDataDir(cfg.BrowserTempDir)
+		UserDataDir(userDataDir)
 
 	if cfg.BrowserBinPath != "" {
 		browserLauncher.Bin(cfg.BrowserBinPath)

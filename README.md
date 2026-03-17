@@ -157,6 +157,7 @@ That's it. Your AI agent can now browse the web.
 --omit-images      Don't include base64 images in responses
 --cdp-endpoint     Connect to an existing browser via CDP
 --chrome-debug-port  Launch Chrome with remote debugging on this port
+--user-data-dir    Use an existing Chrome profile directory (inherits cookies/sessions)
 --no-banner        Suppress the startup banner
 ```
 
@@ -189,12 +190,23 @@ domainHeaders:
 
 To control an already-running Chrome instance (useful for authenticated sessions):
 
-**Option A** — Let rod-mcp launch Chrome with debugging enabled:
+**Option A** — Reuse your existing Chrome profile (cookies, sessions, auth):
+```bash
+# macOS
+rod-mcp --user-data-dir "$HOME/Library/Application Support/Google/Chrome"
+
+# Linux
+rod-mcp --user-data-dir "$HOME/.config/google-chrome"
+```
+
+> **Note**: Chrome can only run one instance per profile. Quit Chrome before using `--user-data-dir` with your main profile, or use a separate profile directory.
+
+**Option B** — Let rod-mcp launch Chrome with debugging enabled:
 ```bash
 rod-mcp --chrome-debug-port 9222
 ```
 
-**Option B** — Launch Chrome yourself, then connect:
+**Option C** — Launch Chrome yourself, then connect:
 1. Launch Chrome with remote debugging:
    ```bash
    google-chrome --remote-debugging-port=9222
