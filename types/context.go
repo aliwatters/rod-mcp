@@ -116,6 +116,23 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 	if err != nil {
 		return nil, "", err
 	}
+
+	// Inject decrypted cookies via CDP when using profile cloning (not --no-clone).
+	// The Cookies DB is encrypted by the OS, so we decrypt from the source profile
+	// and inject into the fresh browser via CDP.
+	if cfg.UserDataDir != "" && !cfg.NoClone {
+		cookies, err := ReadChromeCookies(cfg.UserDataDir, cfg.CloneDomains)
+		if err != nil {
+			log.Warnf("cookie injection: %s (browser will start without cookies)", err)
+		} else if len(cookies) > 0 {
+			if err := b.SetCookies(cookies); err != nil {
+				log.Warnf("cookie injection via CDP failed: %s", err)
+			} else {
+				log.Infof("injected %d cookies via CDP", len(cookies))
+			}
+		}
+	}
+
 	return b, clonedDir, nil
 }
 
