@@ -58,6 +58,10 @@ func launchBrowser(ctx context.Context, cfg Config) (*rod.Browser, error) {
 		}
 	}
 
+	if cfg.ChromeDebugPort != "" {
+		browserLauncher.Set("remote-debugging-port", cfg.ChromeDebugPort)
+	}
+
 	if cfg.Proxy != "" {
 		browserLauncher.Proxy(cfg.Proxy)
 	}

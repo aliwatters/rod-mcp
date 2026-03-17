@@ -41,6 +41,10 @@ func main() {
 		cfg.CDPEndpoint = subCfg.CDPEndpoint
 	}
 
+	if subCfg.ChromeDebugPort != "" {
+		cfg.ChromeDebugPort = subCfg.ChromeDebugPort
+	}
+
 	if subCfg.CompactSnapshot {
 		cfg.CompactSnapshot = true
 	}
