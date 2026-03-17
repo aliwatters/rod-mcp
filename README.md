@@ -211,7 +211,9 @@ rod-mcp --user-data-dir "$HOME/.config/google-chrome" \
 rod-mcp --user-data-dir "$HOME/Library/Application Support/Google/Chrome"
 ```
 
-By default, `--user-data-dir` **clones** the profile to a temp directory (cleaned up on exit) so your main Chrome stays usable. Only lightweight auth files are copied (cookies, local storage, preferences).
+By default, `--user-data-dir` **clones** the profile to a temp directory (cleaned up on exit) so your main Chrome stays usable. Cookies are decrypted from Chrome's encrypted database using your macOS Keychain and injected via CDP — no need to quit your main browser.
+
+> **Note**: Cookie decryption currently requires macOS (reads "Chrome Safe Storage" from Keychain) and `sqlite3` in PATH. On other platforms, use `--no-clone` as a workaround.
 
 ```bash
 # Use profile directly without cloning (Chrome must not be running)

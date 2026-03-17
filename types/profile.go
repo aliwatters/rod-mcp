@@ -63,18 +63,10 @@ func cloneProfile(srcDir string, domains []string) (string, error) {
 		}
 	}
 
-	// Copy cookies — filtered by domain if possible.
-	cookieSrc := filepath.Join(profileDir, "Cookies")
-	cookieDst := filepath.Join(tmpProfile, "Cookies")
-	if _, err := os.Stat(cookieSrc); err == nil {
-		if err := copyFile(cookieSrc, cookieDst); err != nil {
-			log.Warnf("clone profile: skip Cookies: %s", err)
-		} else if len(domains) > 0 {
-			if err := filterCookiesByDomain(cookieDst, domains); err != nil {
-				log.Warnf("clone profile: cookie filtering failed (keeping all): %s", err)
-			}
-		}
-	}
+	// NOTE: Cookies are NOT copied here. Chrome encrypts cookie values with
+	// OS-level keys (macOS Keychain, Linux DPAPI, etc.) that are tied to the
+	// original profile. Instead, cookies are decrypted and injected via CDP
+	// after browser launch — see ReadChromeCookies() in cookies.go.
 
 	// Copy Local Storage directory (usually small, contains auth tokens).
 	localStorageSrc := filepath.Join(profileDir, "Local Storage")
