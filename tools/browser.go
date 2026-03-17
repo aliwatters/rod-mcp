@@ -61,6 +61,8 @@ var (
 				Expression:            script,
 				ObjectGroup:           "console",
 				IncludeCommandLineAPI: true,
+				ReturnByValue:         true,
+				AwaitPromise:          true,
 			}.Call(page)
 			if err != nil {
 				return toolErr("evaluate code", err)
