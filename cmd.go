@@ -7,6 +7,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/urfave/cli/v2"
 	"os"
+	"strings"
 )
 
 type SubCfg struct {
@@ -15,6 +16,10 @@ type SubCfg struct {
 	Mode            types.Mode
 	CDPEndpoint     string
 	ChromeDebugPort string
+	UserDataDir     string
+	CloneDomains    string
+	NoClone         bool
+	CloneAll        bool
 	CompactSnapshot bool
 	OutputDir       string
 	OmitImages      bool
@@ -42,6 +47,23 @@ func RunCmd() (*SubCfg, error) {
 				Name:        "chrome-debug-port",
 				Usage:       "launch Chrome with --remote-debugging-port on the given port (e.g. 9222)",
 				Destination: &subConfig.ChromeDebugPort,
+			}, &cli.StringFlag{
+				Name:        "user-data-dir",
+				Usage:       "Chrome profile directory to clone from (inherits cookies, sessions, auth state)",
+				Destination: &subConfig.UserDataDir,
+			}, &cli.StringFlag{
+				Name:        "clone-domains",
+				Usage:       "comma-separated domains to clone cookies for (e.g. \"localhost,*.clerk.dev\")",
+				Destination: &subConfig.CloneDomains,
+			},
+			&cli.BoolFlag{
+				Name:        "no-clone",
+				Usage:       "use the profile directory directly instead of cloning (locks your main Chrome)",
+				Destination: &subConfig.NoClone,
+			},
+			&cli.BoolFlag{
+				Name:  "clone-all",
+				Usage: "clone the ENTIRE profile including extensions, history, passwords (slow, use with caution)",
 			},
 			&cli.BoolFlag{
 				Name:        "headless",
@@ -96,6 +118,9 @@ func RunCmd() (*SubCfg, error) {
 			if c.Bool("omit-images") {
 				subConfig.OmitImages = true
 			}
+			if c.Bool("clone-all") {
+				subConfig.CloneAll = true
+			}
 			return nil
 		},
 	}
@@ -104,4 +129,19 @@ func RunCmd() (*SubCfg, error) {
 		return nil, errors.Wrapf(err, "run cmd error")
 	}
 	return &subConfig, nil
+}
+
+// parseCloneDomains splits a comma-separated domain string into a slice.
+func parseCloneDomains(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var domains []string
+	for _, d := range strings.Split(s, ",") {
+		d = strings.TrimSpace(d)
+		if d != "" {
+			domains = append(domains, d)
+		}
+	}
+	return domains
 }
