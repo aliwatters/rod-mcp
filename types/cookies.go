@@ -176,7 +176,7 @@ func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCoo
 		return nil, nil
 	}
 
-	var cookies []*proto.NetworkCookieParam
+	cookies := make([]*proto.NetworkCookieParam, 0, len(lines))
 	var decryptErrors int
 
 	for _, line := range lines {

@@ -4,16 +4,14 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/charmbracelet/log"
 )
 
 // cloneProfile copies auth-relevant files from a Chrome user data directory
-// into a temporary directory. If domains is non-empty and sqlite3 is available,
-// cookies are filtered to only include matching domains.
+// into a temporary directory. Cookies are NOT copied — they are decrypted and
+// injected via CDP after browser launch (see ReadChromeCookies in cookies.go).
 //
 // Returns the path to the cloned directory, which the caller must clean up.
 func cloneProfile(srcDir string, domains []string) (string, error) {
@@ -124,52 +122,6 @@ func isValidDomainPattern(d string) bool {
 		}
 	}
 	return len(d) > 0
-}
-
-// filterCookiesByDomain uses sqlite3 CLI to delete cookies not matching the given domains.
-// Falls back silently if sqlite3 is not available.
-func filterCookiesByDomain(cookiesDB string, domains []string) error {
-	sqlite3Path, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return fmt.Errorf("sqlite3 not found in PATH: cookie filtering unavailable")
-	}
-
-	// Build WHERE clause: keep cookies matching any domain pattern.
-	// Domain patterns: "example.com" matches ".example.com" and "example.com"
-	// Wildcard "*.example.com" matches ".example.com" subdomains.
-	var conditions []string
-	for _, d := range domains {
-		d = strings.TrimSpace(d)
-		if d == "" {
-			continue
-		}
-		if !isValidDomainPattern(d) {
-			return fmt.Errorf("invalid domain pattern %q: only alphanumeric, dots, hyphens, and wildcards allowed", d)
-		}
-		if strings.HasPrefix(d, "*.") {
-			// *.example.com → match .example.com suffix
-			suffix := d[1:] // ".example.com"
-			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", suffix))
-		} else {
-			// exact domain: match both ".domain" and "domain"
-			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", d))
-		}
-	}
-
-	if len(conditions) == 0 {
-		return nil
-	}
-
-	keepClause := strings.Join(conditions, " OR ")
-	query := fmt.Sprintf("DELETE FROM cookies WHERE NOT (%s);", keepClause)
-
-	cmd := exec.Command(sqlite3Path, cookiesDB, query)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("sqlite3 filter: %w: %s", err, string(output))
-	}
-
-	log.Infof("filtered cookies to domains: %s", strings.Join(domains, ", "))
-	return nil
 }
 
 // copyFile copies a single file from src to dst, ensuring data is flushed to disk.
