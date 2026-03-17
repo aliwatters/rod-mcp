@@ -28,6 +28,9 @@ type Config struct {
 	CDPEndpoint      string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
 	ChromeDebugPort  string            `yaml:"chromeDebugPort" json:"chromeDebugPort"`
 	UserDataDir      string            `yaml:"userDataDir" json:"userDataDir"`
+	CloneDomains     []string          `yaml:"cloneDomains" json:"cloneDomains"`
+	NoClone          bool              `yaml:"noClone" json:"noClone"`
+	CloneAll         bool              `yaml:"cloneAll" json:"cloneAll"`
 	ServerName       string            `yaml:"serverName" json:"serverName"`
 	ServerVersion    string            `yaml:"-" json:"-"`
 	BrowserBinPath   string            `yaml:"browserBinPath" json:"browserBinPath"`

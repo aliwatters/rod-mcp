@@ -157,7 +157,10 @@ That's it. Your AI agent can now browse the web.
 --omit-images      Don't include base64 images in responses
 --cdp-endpoint     Connect to an existing browser via CDP
 --chrome-debug-port  Launch Chrome with remote debugging on this port
---user-data-dir    Use an existing Chrome profile directory (inherits cookies/sessions)
+--user-data-dir    Clone a Chrome profile directory (inherits cookies/sessions)
+--clone-domains    Comma-separated domains to clone cookies for (e.g. "localhost,*.clerk.dev")
+--no-clone         Use profile directly instead of cloning (locks your main Chrome)
+--clone-all        Clone ENTIRE profile including passwords, history, extensions (slow!)
 --no-banner        Suppress the startup banner
 ```
 
@@ -175,6 +178,10 @@ proxy: ""                     # proxy URL (e.g. socks5://localhost:1080)
 compactSnapshot: false        # reduce tokens in snapshots
 outputDir: ""                 # screenshot/PDF output (default: OS temp)
 imageResponses: allow         # allow or omit inline base64 images
+userDataDir: ""               # Chrome profile to clone (e.g. ~/Library/Application Support/Google/Chrome)
+cloneDomains:                 # domains to clone cookies for (empty = all cookies)
+  - "localhost"
+  - "*.clerk.dev"
 
 # Inject HTTP headers globally
 extraHTTPHeaders:
@@ -190,16 +197,30 @@ domainHeaders:
 
 To control an already-running Chrome instance (useful for authenticated sessions):
 
-**Option A** — Reuse your existing Chrome profile (cookies, sessions, auth):
+**Option A** — Clone your Chrome profile (cookies, sessions, auth) for specific domains:
 ```bash
-# macOS
-rod-mcp --user-data-dir "$HOME/Library/Application Support/Google/Chrome"
+# macOS — clone only cookies for your app's domains
+rod-mcp --user-data-dir "$HOME/Library/Application Support/Google/Chrome" \
+        --clone-domains "localhost,*.clerk.dev,*.stripe.com"
 
 # Linux
-rod-mcp --user-data-dir "$HOME/.config/google-chrome"
+rod-mcp --user-data-dir "$HOME/.config/google-chrome" \
+        --clone-domains "localhost,*.myapp.com"
+
+# Clone all cookies (no domain filter)
+rod-mcp --user-data-dir "$HOME/Library/Application Support/Google/Chrome"
 ```
 
-> **Note**: Chrome can only run one instance per profile. Quit Chrome before using `--user-data-dir` with your main profile, or use a separate profile directory.
+By default, `--user-data-dir` **clones** the profile to a temp directory (cleaned up on exit) so your main Chrome stays usable. Only lightweight auth files are copied (cookies, local storage, preferences).
+
+```bash
+# Use profile directly without cloning (Chrome must not be running)
+rod-mcp --user-data-dir "..." --no-clone
+
+# ⚠️  Clone EVERYTHING — passwords, history, extensions, all browser data
+# This is slow for large profiles and copies sensitive data to a temp directory
+rod-mcp --user-data-dir "..." --clone-all
+```
 
 **Option B** — Let rod-mcp launch Chrome with debugging enabled:
 ```bash

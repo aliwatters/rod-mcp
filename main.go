@@ -49,6 +49,18 @@ func main() {
 		cfg.UserDataDir = subCfg.UserDataDir
 	}
 
+	if domains := parseCloneDomains(subCfg.CloneDomains); len(domains) > 0 {
+		cfg.CloneDomains = domains
+	}
+
+	if subCfg.NoClone {
+		cfg.NoClone = true
+	}
+
+	if subCfg.CloneAll {
+		cfg.CloneAll = true
+	}
+
 	if subCfg.CompactSnapshot {
 		cfg.CompactSnapshot = true
 	}
