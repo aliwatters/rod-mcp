@@ -7,6 +7,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -59,6 +60,10 @@ func launchBrowser(ctx context.Context, cfg Config) (*rod.Browser, error) {
 	}
 
 	if cfg.ChromeDebugPort != "" {
+		port, err := strconv.Atoi(cfg.ChromeDebugPort)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, fmt.Errorf("invalid chrome-debug-port %q: must be 1-65535", cfg.ChromeDebugPort)
+		}
 		browserLauncher.Set("remote-debugging-port", cfg.ChromeDebugPort)
 	}
 

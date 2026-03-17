@@ -156,6 +156,7 @@ That's it. Your AI agent can now browse the web.
 --output-dir       Directory for screenshots and PDFs
 --omit-images      Don't include base64 images in responses
 --cdp-endpoint     Connect to an existing browser via CDP
+--chrome-debug-port  Launch Chrome with remote debugging on this port
 --no-banner        Suppress the startup banner
 ```
 
@@ -188,6 +189,12 @@ domainHeaders:
 
 To control an already-running Chrome instance (useful for authenticated sessions):
 
+**Option A** — Let rod-mcp launch Chrome with debugging enabled:
+```bash
+rod-mcp --chrome-debug-port 9222
+```
+
+**Option B** — Launch Chrome yourself, then connect:
 1. Launch Chrome with remote debugging:
    ```bash
    google-chrome --remote-debugging-port=9222
