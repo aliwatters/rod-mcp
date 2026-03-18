@@ -350,7 +350,13 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
-	// Listen for console messages and network events
+	ctx.attachEventListeners(page)
+
+	return page, nil
+}
+
+// attachEventListeners registers goroutine-based listeners for console messages and network requests.
+func (ctx *Context) attachEventListeners(page *rod.Page) {
 	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
 		var parts []string
 		for _, arg := range e.Args {
@@ -385,8 +391,6 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 		ctx.stateLock.Unlock()
 	})()
-
-	return page, nil
 }
 
 // ConsoleMessages returns captured console messages, optionally filtered by level.
