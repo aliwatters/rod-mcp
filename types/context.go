@@ -66,7 +66,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 			cfg.BrowserTempDir = DefaultBrowserTempDir
 		}
 		// browser must own a unique temp dir
-		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(10))
+		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(tempDirSuffixLen))
 	}
 
 	browserLauncher := launcher.New().
@@ -80,7 +80,6 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		Set("disable-popup-blocking").
 		Set("mute-audio", "true").
 		Set("use-mock-keychain").
-		//Set("--disable-permissions-api").
 		Set("--remote-allow-origins", "*").
 		Set("--disable-dev-shm-usage").
 		Set("--disable-features", "HttpsUpgrades").
@@ -92,7 +91,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		if browserPath, has := launcher.LookPath(); has {
 			browserLauncher.Bin(browserPath)
 		} else {
-			return nil, "", errors.New("the machine does not have Chrome installed,please set the executable_path or installed a chrome")
+			return nil, "", errors.New("Chrome not found; set browserBinPath in config or install Chrome/Chromium")
 		}
 	}
 
@@ -161,6 +160,15 @@ const (
 
 	// Text mode indicates the no vision ll model,will load the text tools
 	Text Mode = "text"
+)
+
+const (
+	// tempDirSuffixLen is the number of random characters appended to the browser temp dir name.
+	tempDirSuffixLen = 10
+	// cleanupRetryCount is the number of times to retry removing the browser temp dir on Close.
+	cleanupRetryCount = 3
+	// cleanupRetryDelay is the wait between browser temp dir removal retries.
+	cleanupRetryDelay = 200 * time.Millisecond
 )
 
 // ConsoleMessage represents a captured browser console message.
@@ -356,7 +364,13 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
-	// Listen for console messages and network events
+	ctx.attachEventListeners(page)
+
+	return page, nil
+}
+
+// attachEventListeners registers goroutine-based listeners for console messages and network requests.
+func (ctx *Context) attachEventListeners(page *rod.Page) {
 	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
 		var parts []string
 		for _, arg := range e.Args {
@@ -391,8 +405,6 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 		ctx.stateLock.Unlock()
 	})()
-
-	return page, nil
 }
 
 // ConsoleMessages returns captured console messages, optionally filtered by level.
@@ -631,13 +643,13 @@ func (ctx *Context) Close() error {
 	// remove browser temp dir, retrying briefly to handle race with browser shutdown
 	if ctx.config.BrowserTempDir != "" && ctx.config.CDPEndpoint == "" {
 		var lastErr error
-		for range 3 {
+		for range cleanupRetryCount {
 			if err := os.RemoveAll(ctx.config.BrowserTempDir); err == nil {
 				lastErr = nil
 				break
 			} else {
 				lastErr = err
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(cleanupRetryDelay)
 			}
 		}
 		if lastErr != nil {
