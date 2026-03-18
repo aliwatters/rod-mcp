@@ -24,7 +24,7 @@ Build: [%s] [%s]
 var (
 	Version   = ""
 	BuildTime = ""
-	localTime = utils.GetChinaZoneTime(BuildTime)
+	localTime = utils.FormatBuildTime(BuildTime)
 	style     = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(lipgloss.Color("#30c3e6"))

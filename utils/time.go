@@ -7,9 +7,13 @@ const (
 	DefaultDateFormat = "2006-01-02"
 )
 
-func GetChinaZoneTime(timeStr string) string {
-	t, _ := time.Parse(time.RFC3339, timeStr)
-
-	cst := t.In(time.FixedZone("CST", 8*3600))
-	return cst.Format("2006-01-02 15:04:05")
+func FormatBuildTime(timeStr string) string {
+	if timeStr == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, timeStr)
+	if err != nil {
+		return timeStr
+	}
+	return t.Local().Format("2006-01-02 15:04:05")
 }
