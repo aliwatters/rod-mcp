@@ -241,7 +241,6 @@ func (ctx *Context) initial() error {
 	}
 
 	return nil
-
 }
 
 func (ctx *Context) CurrentMode() Mode {
@@ -302,14 +301,12 @@ func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
 		return nil, errors.New("No snapshot to used, call rod_snapshot first")
 	}
 	return ctx.snapshot, nil
-
 }
 
 func (ctx *Context) CloseBrowser() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 	return ctx.closeBrowser()
-
 }
 
 func (ctx *Context) closePage() error {
