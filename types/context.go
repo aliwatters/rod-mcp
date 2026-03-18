@@ -80,7 +80,6 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		Set("disable-popup-blocking").
 		Set("mute-audio", "true").
 		Set("use-mock-keychain").
-		//Set("--disable-permissions-api").
 		Set("--remote-allow-origins", "*").
 		Set("--disable-dev-shm-usage").
 		Set("--disable-features", "HttpsUpgrades").
@@ -92,7 +91,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		if browserPath, has := launcher.LookPath(); has {
 			browserLauncher.Bin(browserPath)
 		} else {
-			return nil, "", errors.New("the machine does not have Chrome installed,please set the executable_path or installed a chrome")
+			return nil, "", errors.New("Chrome not found; set browserBinPath in config or install Chrome/Chromium")
 		}
 	}
 
