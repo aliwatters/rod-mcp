@@ -80,25 +80,20 @@ var (
 			}
 
 			switch state {
-			case "visible":
+			case "visible", "hidden":
 				el, err := timedPage.Element(selector)
 				if err != nil {
 					return toolErr(fmt.Sprintf("wait for %q", selector), err)
 				}
-				if err = el.WaitVisible(); err != nil {
-					return toolErr(fmt.Sprintf("wait for %q to be visible", selector), err)
+				if state == "visible" {
+					err = el.WaitVisible()
+				} else {
+					err = el.WaitInvisible()
 				}
-				return mcp.NewToolResultText(fmt.Sprintf("Element %q is visible", selector)), nil
-
-			case "hidden":
-				el, err := timedPage.Element(selector)
 				if err != nil {
-					return toolErr(fmt.Sprintf("wait for %q", selector), err)
+					return toolErr(fmt.Sprintf("wait for %q to be %s", selector, state), err)
 				}
-				if err = el.WaitInvisible(); err != nil {
-					return toolErr(fmt.Sprintf("wait for %q to be hidden", selector), err)
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("Element %q is hidden", selector)), nil
+				return mcp.NewToolResultText(fmt.Sprintf("Element %q is %s", selector, state)), nil
 
 			case "attached":
 				if _, err := timedPage.Element(selector); err != nil {
