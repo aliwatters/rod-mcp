@@ -276,6 +276,12 @@ func compactSequenceNode(node *yaml.Node) *yaml.Node {
 	return node
 }
 
+// Compact snapshot filtering strategy:
+// 1. Keep nodes with [ref=...] attributes (interactive elements)
+// 2. Keep structural ARIA roles (headings, navigation, main, etc.)
+// 3. Remove pure text nodes (text: ...) to reduce token count
+// 4. Truncate long scalars to prevent bloated snapshots
+
 // compactScalarNode filters scalars: keeps refs and structural roles, removes pure text.
 func compactScalarNode(node *yaml.Node) *yaml.Node {
 	if node.Tag != "!!str" {
@@ -316,15 +322,18 @@ func nodeHasRef(node *yaml.Node) bool {
 	return false
 }
 
-// isStructuralRole checks if a scalar value starts with a structural ARIA role
+// structuralPrefixes lists ARIA role prefixes that identify structural/landmark elements.
+// Declared at package level to avoid re-allocating the slice on every isStructuralRole call.
+var structuralPrefixes = []string{
+	"heading ", "navigation ", "main", "banner", "contentinfo",
+	"complementary", "list ", "listitem", "table ", "row ", "cell ",
+	"dialog ", "alert ", "form ", "search ", "img ", "iframe ",
+	"region ", "article ", "section ", "group ", "toolbar ",
+	"menu ", "menubar ", "menuitem ", "tab ", "tablist ", "tabpanel ",
+}
+
+// isStructuralRole checks if a scalar value starts with a structural ARIA role.
 func isStructuralRole(value string) bool {
-	structuralPrefixes := []string{
-		"heading ", "navigation ", "main", "banner", "contentinfo",
-		"complementary", "list ", "listitem", "table ", "row ", "cell ",
-		"dialog ", "alert ", "form ", "search ", "img ", "iframe ",
-		"region ", "article ", "section ", "group ", "toolbar ",
-		"menu ", "menubar ", "menuitem ", "tab ", "tablist ", "tabpanel ",
-	}
 	lower := strings.ToLower(value)
 	for _, prefix := range structuralPrefixes {
 		if strings.HasPrefix(lower, prefix) {
