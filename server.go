@@ -43,10 +43,7 @@ func (s *Server) registerTools(mcpTools []mcp.Tool, handlers map[string]tools.To
 }
 
 func (s *Server) Start() error {
-	if err := server.ServeStdio(s.mcpServer); err != nil {
-		return err
-	}
-	return nil
+	return server.ServeStdio(s.mcpServer)
 }
 
 func (s *Server) Close() error {
