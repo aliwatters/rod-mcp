@@ -28,7 +28,6 @@ func NewServer(stdCtx context.Context, cfg types.Config) *Server {
 		ser.registerTools(tools.VisionTools, tools.VisionCombinedHandlers)
 	}
 	return ser
-
 }
 
 func (s *Server) registerTools(mcpTools []mcp.Tool, handlers map[string]tools.ToolHandler) *Server {
@@ -36,11 +35,11 @@ func (s *Server) registerTools(mcpTools []mcp.Tool, handlers map[string]tools.To
 		if handlerFunc, ok := handlers[mt.Name]; ok {
 			log.Debugf("register tool: %s", mt.Name)
 			s.mcpServer.AddTool(mt, handlerFunc(s.ctx))
+		} else {
+			log.Warnf("tool %q defined but no handler registered — check tool name", mt.Name)
 		}
-
 	}
 	return s
-
 }
 
 func (s *Server) Start() error {
