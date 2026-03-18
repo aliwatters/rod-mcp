@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.23.7-bookworm AS builder
+FROM golang:1.24-bookworm AS builder
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -21,11 +21,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-liberation \
     && rm -rf /var/lib/apt/lists/*
 
+RUN useradd -m -u 1000 rodmcp
+
 COPY --from=builder /rod-mcp /usr/local/bin/rod-mcp
 
 WORKDIR /app
 
 # Default config: headless + no-sandbox for container environment
 RUN printf 'mode: text\nheadless: true\nnoSandbox: true\nbrowserTempDir: /tmp/rod/browser\n' > rod-mcp.yaml
+
+USER rodmcp
 
 ENTRYPOINT ["rod-mcp", "--no-banner"]
