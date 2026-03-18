@@ -66,7 +66,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 			cfg.BrowserTempDir = DefaultBrowserTempDir
 		}
 		// browser must own a unique temp dir
-		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(10))
+		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(tempDirSuffixLen))
 	}
 
 	browserLauncher := launcher.New().
@@ -143,6 +143,15 @@ const (
 
 	// Text mode indicates the no vision ll model,will load the text tools
 	Text Mode = "text"
+)
+
+const (
+	// tempDirSuffixLen is the number of random characters appended to the browser temp dir name.
+	tempDirSuffixLen = 10
+	// cleanupRetryCount is the number of times to retry removing the browser temp dir on Close.
+	cleanupRetryCount = 3
+	// cleanupRetryDelay is the wait between browser temp dir removal retries.
+	cleanupRetryDelay = 200 * time.Millisecond
 )
 
 // ConsoleMessage represents a captured browser console message.
@@ -616,13 +625,13 @@ func (ctx *Context) Close() error {
 	// remove browser temp dir, retrying briefly to handle race with browser shutdown
 	if ctx.config.BrowserTempDir != "" && ctx.config.CDPEndpoint == "" {
 		var lastErr error
-		for range 3 {
+		for range cleanupRetryCount {
 			if err := os.RemoveAll(ctx.config.BrowserTempDir); err == nil {
 				lastErr = nil
 				break
 			} else {
 				lastErr = err
-				time.Sleep(200 * time.Millisecond)
+				time.Sleep(cleanupRetryDelay)
 			}
 		}
 		if lastErr != nil {

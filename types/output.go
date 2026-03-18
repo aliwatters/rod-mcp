@@ -7,7 +7,10 @@ import (
 	"time"
 )
 
-const defaultOutputSubdir = "rod-mcp"
+const (
+	defaultOutputSubdir   = "rod-mcp"
+	outputTimestampFormat = "20060102-150405"
+)
 
 // ResolveOutputDir returns the output directory, creating it if necessary.
 // If cfg.OutputDir is set, uses that. Otherwise uses os.TempDir()/rod-mcp.
@@ -29,7 +32,7 @@ func SaveOutput(cfg Config, data []byte, prefix, ext string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	filename := fmt.Sprintf("%s-%s.%s", prefix, time.Now().Format("20060102-150405"), ext)
+	filename := fmt.Sprintf("%s-%s.%s", prefix, time.Now().Format(outputTimestampFormat), ext)
 	path := filepath.Join(dir, filename)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write %s: %w", path, err)
