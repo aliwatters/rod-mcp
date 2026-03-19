@@ -48,6 +48,9 @@ var (
 		Cookies,
 		Storage,
 		Permissions,
+		Intercept,
+		ResponseBody,
+		WebSocket,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -77,6 +80,9 @@ var (
 		CookiesToolKey:         CookiesHandler,
 		StorageToolKey:         StorageHandler,
 		PermissionsToolKey:     PermissionsHandler,
+		InterceptToolKey:       InterceptHandler,
+		ResponseBodyToolKey:    ResponseBodyHandler,
+		WebSocketToolKey:       WebSocketHandler,
 	}
 )
 
