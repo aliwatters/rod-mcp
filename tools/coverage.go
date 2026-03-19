@@ -62,7 +62,11 @@ var (
 					started = append(started, "JS")
 				}
 				if doCSS {
-					err := proto.CSSEnable{}.Call(page)
+					err := proto.DOMEnable{}.Call(page)
+					if err != nil {
+						return toolErr("enable DOM domain", err)
+					}
+					err = proto.CSSEnable{}.Call(page)
 					if err != nil {
 						return toolErr("enable CSS domain", err)
 					}
