@@ -40,7 +40,7 @@ var (
 	TabNewHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			url := ""
-			if u, ok := request.Params.Arguments["url"].(string); ok {
+			if u, ok := request.GetArguments()["url"].(string); ok {
 				url = u
 			}
 			if url != "" && !utils.IsHttp(url) {
@@ -78,7 +78,7 @@ var (
 
 	TabSelectHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			indexF, err := getFloatArg(request.Params.Arguments, "index")
+			indexF, err := getFloatArg(request.GetArguments(), "index")
 			if err != nil {
 				return toolErr("select tab", err)
 			}
@@ -98,7 +98,7 @@ var (
 
 	TabCloseHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			indexF, err := getFloatArg(request.Params.Arguments, "index")
+			indexF, err := getFloatArg(request.GetArguments(), "index")
 			if err != nil {
 				return toolErr("close tab", err)
 			}

@@ -56,7 +56,7 @@ func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page)
 var (
 	NavigationHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			url, err := getStringArg(request.Params.Arguments, "url")
+			url, err := getStringArg(request.GetArguments(), "url")
 			if err != nil {
 				return toolErr("navigate", err)
 			}

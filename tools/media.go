@@ -43,7 +43,7 @@ var (
 			if err != nil {
 				return toolErr("capture screenshot", err)
 			}
-			name, err := getStringArg(request.Params.Arguments, "name")
+			name, err := getStringArg(request.GetArguments(), "name")
 			if err != nil {
 				return toolErr("screenshot", err)
 			}
@@ -82,7 +82,7 @@ var (
 			if err != nil {
 				return toolErr("read PDF data", err)
 			}
-			name, err := getStringArg(request.Params.Arguments, "name")
+			name, err := getStringArg(request.GetArguments(), "name")
 			if err != nil {
 				return toolErr("generate PDF", err)
 			}

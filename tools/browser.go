@@ -53,7 +53,7 @@ var (
 			if err != nil {
 				return toolErr("evaluate", err)
 			}
-			script, err := getStringArg(request.Params.Arguments, "script")
+			script, err := getStringArg(request.GetArguments(), "script")
 			if err != nil {
 				return toolErr("evaluate", err)
 			}
@@ -94,7 +94,7 @@ var (
 			if err != nil {
 				return toolErr("set headers", err)
 			}
-			headersArg := request.Params.Arguments["headers"]
+			headersArg := request.GetArguments()["headers"]
 			headersMap, ok := headersArg.(map[string]interface{})
 			if !ok {
 				return nil, errors.New("headers must be an object with key-value pairs")
@@ -117,19 +117,19 @@ var (
 			if err != nil {
 				return toolErr("resize viewport", err)
 			}
-			widthF, err := getFloatArg(request.Params.Arguments, "width")
+			widthF, err := getFloatArg(request.GetArguments(), "width")
 			if err != nil {
 				return toolErr("resize viewport", err)
 			}
-			heightF, err := getFloatArg(request.Params.Arguments, "height")
+			heightF, err := getFloatArg(request.GetArguments(), "height")
 			if err != nil {
 				return toolErr("resize viewport", err)
 			}
 			width := int(widthF)
 			height := int(heightF)
 
-			deviceScaleFactor := getOptionalFloatArg(request.Params.Arguments, "device_scale_factor", 1.0)
-			mobile := getOptionalBoolArg(request.Params.Arguments, "is_mobile", false)
+			deviceScaleFactor := getOptionalFloatArg(request.GetArguments(), "device_scale_factor", 1.0)
+			mobile := getOptionalBoolArg(request.GetArguments(), "is_mobile", false)
 
 			err = proto.EmulationSetDeviceMetricsOverride{
 				Width:             width,
@@ -152,7 +152,7 @@ var (
 				return toolErr("handle dialog", err)
 			}
 
-			action, err := getStringArg(request.Params.Arguments, "action")
+			action, err := getStringArg(request.GetArguments(), "action")
 			if err != nil {
 				return toolErr("handle dialog", err)
 			}
@@ -162,7 +162,7 @@ var (
 
 			accept := action == "accept"
 			promptText := ""
-			if t, ok := request.Params.Arguments["text"].(string); ok {
+			if t, ok := request.GetArguments()["text"].(string); ok {
 				promptText = t
 			}
 
