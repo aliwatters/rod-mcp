@@ -647,7 +647,7 @@ func TestE2E(t *testing.T) {
 			assertContainsAny(t, result, "New tab", "created", "content")
 		})
 		t.Run("list", func(t *testing.T) {
-			time.Sleep(1 * time.Second) // Allow new tab to load.
+			h.call("rod_wait_for", map[string]any{"selector": "body", "timeout": 10000})
 			result := h.call("rod_tab_list", nil)
 			assertContainsAny(t, result, "example.com", "the-internet")
 		})
