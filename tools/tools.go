@@ -45,6 +45,9 @@ var (
 		Scroll,
 		HTML,
 		Coverage,
+		Cookies,
+		Storage,
+		Permissions,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -71,6 +74,9 @@ var (
 		ScrollToolKey:          ScrollHandler,
 		HTMLToolKey:            HTMLHandler,
 		CoverageToolKey:        CoverageHandler,
+		CookiesToolKey:         CookiesHandler,
+		StorageToolKey:         StorageHandler,
+		PermissionsToolKey:     PermissionsHandler,
 	}
 )
 
