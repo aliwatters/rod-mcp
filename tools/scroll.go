@@ -17,7 +17,7 @@ const (
 var (
 	Scroll = mcp.NewTool(ScrollToolKey,
 		mcp.WithDescription("Scroll the page or a specific element. Supports directional scrolling, absolute positions, and scrolling to top/bottom."),
-		mcp.WithString("direction", mcp.Description("Scroll direction: up, down, left, right, top, bottom")),
+		mcp.WithString("direction", mcp.Description("Scroll direction: up, down, left, right, top, bottom"), mcp.Enum("up", "down", "left", "right", "top", "bottom")),
 		mcp.WithNumber("amount", mcp.Description("Number of pixels to scroll (default: 500). Ignored for top/bottom.")),
 		mcp.WithNumber("x", mcp.Description("Absolute horizontal scroll position in pixels")),
 		mcp.WithNumber("y", mcp.Description("Absolute vertical scroll position in pixels")),
@@ -92,13 +92,13 @@ var (
 			var script string
 			switch direction {
 			case "down":
-				script = fmt.Sprintf(`() => window.scrollBy(0, %f)`, amount)
+				script = fmt.Sprintf(`() => window.scrollBy(0, %.0f)`, amount)
 			case "up":
-				script = fmt.Sprintf(`() => window.scrollBy(0, -%f)`, amount)
+				script = fmt.Sprintf(`() => window.scrollBy(0, -%.0f)`, amount)
 			case "right":
-				script = fmt.Sprintf(`() => window.scrollBy(%f, 0)`, amount)
+				script = fmt.Sprintf(`() => window.scrollBy(%.0f, 0)`, amount)
 			case "left":
-				script = fmt.Sprintf(`() => window.scrollBy(-%f, 0)`, amount)
+				script = fmt.Sprintf(`() => window.scrollBy(-%.0f, 0)`, amount)
 			case "top":
 				script = `() => window.scrollTo(0, 0)`
 			case "bottom":

@@ -54,7 +54,7 @@ var (
 				if outer {
 					html, err = el.HTML()
 				} else {
-					r, err2 := el.Eval(`(el) => el.innerHTML`, el)
+					r, err2 := el.Eval(`() => this.innerHTML`)
 					if err2 != nil {
 						return toolErr(fmt.Sprintf("get innerHTML of %q", selector), err2)
 					}

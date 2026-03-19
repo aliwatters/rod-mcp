@@ -18,9 +18,9 @@ const (
 
 var (
 	Coverage = mcp.NewTool(CoverageToolKey,
-		mcp.WithDescription("Collect CSS and JavaScript code coverage. Start collection, get a report, or stop collection."),
-		mcp.WithString("action", mcp.Description("Action to perform: start, report, stop"), mcp.Required()),
-		mcp.WithString("type", mcp.Description("Coverage type: js, css, or all (default: all)")),
+		mcp.WithDescription("Collect CSS and JavaScript code coverage. Start collection, get a delta report (coverage since last report or since start), or stop collection."),
+		mcp.WithString("action", mcp.Description("Action to perform: start, report, stop"), mcp.Required(), mcp.Enum("start", "report", "stop")),
+		mcp.WithString("type", mcp.Description("Coverage type: js, css, or all (default: all)"), mcp.Enum("js", "css", "all")),
 	)
 )
 
@@ -118,12 +118,12 @@ var (
 				}
 
 				if doCSS {
-					resp, err := proto.CSSStopRuleUsageTracking{}.Call(page)
+					resp, err := proto.CSSTakeCoverageDelta{}.Call(page)
 					if err != nil {
 						return toolErr("get CSS coverage", err)
 					}
 					result.WriteString("## CSS Coverage\n\n")
-					if len(resp.RuleUsage) == 0 {
+					if len(resp.Coverage) == 0 {
 						result.WriteString("No CSS coverage data (is collection started?)\n\n")
 					} else {
 						// Aggregate by stylesheet
@@ -132,7 +132,7 @@ var (
 							used  int
 						}
 						sheets := make(map[string]*sheetStats)
-						for _, rule := range resp.RuleUsage {
+						for _, rule := range resp.Coverage {
 							id := string(rule.StyleSheetID)
 							s, ok := sheets[id]
 							if !ok {
@@ -159,8 +159,6 @@ var (
 							result.WriteString(fmt.Sprintf("\nCSS Total: %.1f%% (%d/%d bytes)\n", pct, usedBytes, totalBytes))
 						}
 					}
-					// Restart CSS tracking for subsequent reports
-					_ = proto.CSSStartRuleUsageTracking{}.Call(page)
 				}
 
 				return mcp.NewToolResultText(result.String()), nil
