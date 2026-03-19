@@ -53,15 +53,15 @@ var (
 				}
 				if outer {
 					html, err = el.HTML()
+					if err != nil {
+						return toolErr(fmt.Sprintf("get outerHTML of %q", selector), err)
+					}
 				} else {
-					r, err2 := el.Eval(`() => this.innerHTML`)
-					if err2 != nil {
-						return toolErr(fmt.Sprintf("get innerHTML of %q", selector), err2)
+					r, err := el.Eval(`() => this.innerHTML`)
+					if err != nil {
+						return toolErr(fmt.Sprintf("get innerHTML of %q", selector), err)
 					}
 					html = r.Value.Str()
-				}
-				if err != nil {
-					return toolErr(fmt.Sprintf("get HTML of %q", selector), err)
 				}
 			}
 
