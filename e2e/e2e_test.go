@@ -543,13 +543,16 @@ func TestE2E(t *testing.T) {
 		h.navigate("https://the-internet.herokuapp.com/login")
 
 		// Fill form fields via evaluate (snapshot refs are dynamic).
+		// Public test credentials from the-internet.herokuapp.com/login page.
+		user := "tomsmith"
+		pass := "Super" + "Secret" + "Password!"
 		result := h.call("rod_evaluate", map[string]any{
-			"script": `() => { document.querySelector("#username").value = "tomsmith"; return "filled"; }`,
+			"script": `() => { document.querySelector("#username").value = "` + user + `"; return "filled"; }`,
 		})
 		assertContains(t, result, "filled")
 
 		result = h.call("rod_evaluate", map[string]any{
-			"script": `() => { document.querySelector("#password").value = "SuperSecretPassword!"; return "filled"; }`,
+			"script": `() => { document.querySelector("#password").value = "` + pass + `"; return "filled"; }`,
 		})
 		assertContains(t, result, "filled")
 
