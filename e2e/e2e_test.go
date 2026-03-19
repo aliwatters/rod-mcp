@@ -70,6 +70,11 @@ func newHarness(t *testing.T) *harness {
 
 	args := []string{"--no-banner"}
 
+	// In CI, run headless (no X server available)
+	if os.Getenv("CI") != "" {
+		args = append(args, "--headless")
+	}
+
 	cmd := exec.Command(binary, args...)
 	cmd.Stderr = os.Stderr
 
