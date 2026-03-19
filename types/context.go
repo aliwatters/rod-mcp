@@ -225,6 +225,16 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 	return ctx.page, nil
 }
 
+// ControlledBrowser returns the browser instance, or an error if no browser is running.
+func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	if ctx.browser == nil {
+		return nil, errors.New("no browser running, call rod_navigate first")
+	}
+	return ctx.browser, nil
+}
+
 func (ctx *Context) initial() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
