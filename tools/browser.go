@@ -33,11 +33,13 @@ var (
 		mcp.WithObject("headers", mcp.Description("Headers as key-value pairs, e.g. {\"Authorization\": \"Bearer token\", \"X-Custom-Header\": \"value\"}"), mcp.Required()),
 	)
 	Resize = mcp.NewTool(ResizeToolKey,
-		mcp.WithDescription("Set the browser viewport dimensions for responsive testing and layout control"),
+		mcp.WithDescription("Set browser viewport dimensions and emulate device characteristics. Supports full device emulation with user agent, touch, and DPR override."),
 		mcp.WithNumber("width", mcp.Description("Viewport width in pixels"), mcp.Required()),
 		mcp.WithNumber("height", mcp.Description("Viewport height in pixels"), mcp.Required()),
 		mcp.WithNumber("device_scale_factor", mcp.Description("Device pixel ratio (default: 1)")),
 		mcp.WithBoolean("is_mobile", mcp.Description("Emulate mobile viewport (default: false)")),
+		mcp.WithString("user_agent", mcp.Description("Override the browser User-Agent string")),
+		mcp.WithBoolean("has_touch", mcp.Description("Enable touch event emulation (default: false)")),
 	)
 	HandleDialog = mcp.NewTool(HandleDialogToolKey,
 		mcp.WithDescription("Handle a JavaScript dialog (alert, confirm, prompt). Use this when a dialog is blocking page interaction."),
@@ -140,7 +142,32 @@ var (
 			if err != nil {
 				return toolErr("resize viewport", err)
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("Viewport resized to %dx%d (scale: %.1f, mobile: %t)", width, height, deviceScaleFactor, mobile)), nil
+
+			userAgent := getOptionalStringArg(request.GetArguments(), "user_agent")
+			if userAgent != "" {
+				if err := (proto.EmulationSetUserAgentOverride{
+					UserAgent: userAgent,
+				}).Call(page); err != nil {
+					return toolErr("set user agent", err)
+				}
+			}
+
+			hasTouch := getOptionalBoolArg(request.GetArguments(), "has_touch", false)
+			if err := (proto.EmulationSetTouchEmulationEnabled{
+				Enabled: hasTouch,
+			}).Call(page); err != nil {
+				return toolErr("set touch emulation", err)
+			}
+
+			msg := fmt.Sprintf("Viewport resized to %dx%d (scale: %.1f, mobile: %t", width, height, deviceScaleFactor, mobile)
+			if userAgent != "" {
+				msg += ", ua: custom"
+			}
+			if hasTouch {
+				msg += ", touch: on"
+			}
+			msg += ")"
+			return mcp.NewToolResultText(msg), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}

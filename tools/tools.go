@@ -51,6 +51,8 @@ var (
 		Intercept,
 		ResponseBody,
 		WebSocket,
+		Performance,
+		Drag,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -83,6 +85,8 @@ var (
 		InterceptToolKey:       InterceptHandler,
 		ResponseBodyToolKey:    ResponseBodyHandler,
 		WebSocketToolKey:       WebSocketHandler,
+		PerformanceToolKey:     PerformanceHandler,
+		DragToolKey:            DragHandler,
 	}
 )
 
