@@ -46,6 +46,7 @@ type harness struct {
 	cmd     *exec.Cmd
 	stdin   io.WriteCloser
 	scanner *bufio.Scanner
+	lines   <-chan scanLine
 	mu      sync.Mutex
 	nextID  int
 	// responses stores responses by ID for out-of-order reading.
@@ -97,6 +98,7 @@ func newHarness(t *testing.T) *harness {
 
 	// Set a large scanner buffer for big responses (screenshots, HTML).
 	h.scanner.Buffer(make([]byte, 0, 4*1024*1024), 4*1024*1024)
+	h.lines = h.startScanner()
 
 	t.Cleanup(func() {
 		stdin.Close()
@@ -119,36 +121,57 @@ func newHarness(t *testing.T) *harness {
 // send sends a JSON-RPC request and returns the assigned ID.
 func (h *harness) send(method string, params any) int {
 	h.t.Helper()
-	h.mu.Lock()
-	id := h.nextID
-	h.nextID++
-	h.mu.Unlock()
 
 	req := jsonRPCRequest{
 		JSONRPC: "2.0",
-		ID:      id,
 		Method:  method,
 		Params:  params,
 	}
+
+	h.mu.Lock()
+	req.ID = h.nextID
+	h.nextID++
 	data, err := json.Marshal(req)
 	if err != nil {
+		h.mu.Unlock()
 		h.t.Fatalf("marshal request: %v", err)
 	}
 	data = append(data, '\n')
-
-	h.mu.Lock()
 	_, err = h.stdin.Write(data)
 	h.mu.Unlock()
 	if err != nil {
 		h.t.Fatalf("write request: %v", err)
 	}
-	return id
+	return req.ID
+}
+
+type scanLine struct {
+	line string
+	eof  bool
+	err  error
+}
+
+// startScanner launches a goroutine that feeds scanned lines into a channel.
+// Must be called once after creating the harness.
+func (h *harness) startScanner() <-chan scanLine {
+	ch := make(chan scanLine, 16)
+	go func() {
+		defer close(ch)
+		for h.scanner.Scan() {
+			ch <- scanLine{line: h.scanner.Text()}
+		}
+		if err := h.scanner.Err(); err != nil {
+			ch <- scanLine{err: err}
+		} else {
+			ch <- scanLine{eof: true}
+		}
+	}()
+	return ch
 }
 
 // recv waits for a response with the given ID, with timeout.
 func (h *harness) recv(id int, timeout time.Duration) jsonRPCResponse {
 	h.t.Helper()
-	deadline := time.Now().Add(timeout)
 
 	// Check if already received.
 	h.mu.Lock()
@@ -159,31 +182,38 @@ func (h *harness) recv(id int, timeout time.Duration) jsonRPCResponse {
 	}
 	h.mu.Unlock()
 
-	for time.Now().Before(deadline) {
-		if !h.scanner.Scan() {
-			if err := h.scanner.Err(); err != nil {
-				h.t.Fatalf("scanner error: %v", err)
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	for {
+		select {
+		case sl, ok := <-h.lines:
+			if !ok || sl.eof {
+				h.t.Fatal("unexpected EOF from rod-mcp")
 			}
-			h.t.Fatal("unexpected EOF from rod-mcp")
-		}
-		line := h.scanner.Text()
+			if sl.err != nil {
+				h.t.Fatalf("scanner error: %v", sl.err)
+			}
 
-		var resp jsonRPCResponse
-		if err := json.Unmarshal([]byte(line), &resp); err != nil {
-			h.t.Logf("non-JSON line: %s", line)
-			continue
-		}
+			var resp jsonRPCResponse
+			if err := json.Unmarshal([]byte(sl.line), &resp); err != nil {
+				h.t.Logf("non-JSON line: %s", sl.line)
+				continue
+			}
 
-		if resp.ID == id {
-			return resp
+			if resp.ID == id {
+				return resp
+			}
+			// Store for later retrieval.
+			h.mu.Lock()
+			h.responses[resp.ID] = resp
+			h.mu.Unlock()
+
+		case <-timer.C:
+			h.t.Fatalf("timeout (%v) waiting for response id=%d", timeout, id)
+			return jsonRPCResponse{} // unreachable
 		}
-		// Store for later retrieval.
-		h.mu.Lock()
-		h.responses[resp.ID] = resp
-		h.mu.Unlock()
 	}
-	h.t.Fatalf("timeout waiting for response id=%d", id)
-	return jsonRPCResponse{} // unreachable
 }
 
 // call sends a tools/call request and returns the text result.
@@ -346,8 +376,15 @@ func TestE2E(t *testing.T) {
 		h.call("rod_evaluate", map[string]any{
 			"script": `() => { console.log("e2e-test-msg-42"); return "done"; }`,
 		})
-		time.Sleep(500 * time.Millisecond)
-		result := h.call("rod_console_messages", nil)
+		// Poll for the console message (CDP event propagation is async).
+		var result string
+		for range 10 {
+			time.Sleep(100 * time.Millisecond)
+			result = h.call("rod_console_messages", nil)
+			if strings.Contains(result, "e2e-test-msg-42") {
+				break
+			}
+		}
 		assertContains(t, result, "e2e-test-msg-42")
 	})
 
