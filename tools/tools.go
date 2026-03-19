@@ -42,6 +42,9 @@ var (
 		ConsoleMessages,
 		FileUpload,
 		NetworkRequests,
+		Scroll,
+		HTML,
+		Coverage,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -65,6 +68,9 @@ var (
 		ConsoleMessagesToolKey: ConsoleMessagesHandler,
 		FileUploadToolKey:      FileUploadHandler,
 		NetworkRequestsToolKey: NetworkRequestsHandler,
+		ScrollToolKey:          ScrollHandler,
+		HTMLToolKey:            HTMLHandler,
+		CoverageToolKey:        CoverageHandler,
 	}
 )
 
