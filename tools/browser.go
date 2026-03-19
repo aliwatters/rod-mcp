@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -42,7 +43,7 @@ var (
 		mcp.WithBoolean("has_touch", mcp.Description("Enable touch event emulation (default: false)")),
 	)
 	HandleDialog = mcp.NewTool(HandleDialogToolKey,
-		mcp.WithDescription("Handle a JavaScript dialog (alert, confirm, prompt). Use this when a dialog is blocking page interaction."),
+		mcp.WithDescription("Handle a JavaScript dialog (alert, confirm, prompt). Call BEFORE triggering the dialog — sets up a listener that auto-handles the next dialog that appears. Returns dialog info once handled."),
 		mcp.WithString("action", mcp.Description("accept or dismiss"), mcp.Required()),
 		mcp.WithString("text", mcp.Description("Text to enter for prompt() dialogs before accepting")),
 	)
@@ -193,14 +194,35 @@ var (
 				promptText = t
 			}
 
-			err = proto.PageHandleJavaScriptDialog{
-				Accept:     accept,
-				PromptText: promptText,
-			}.Call(page)
-			if err != nil {
-				return toolErr("handle dialog", err)
+			// Use rod's HandleDialog which registers a Page.javascriptDialogOpening
+			// listener. This blocks until a dialog appears, then handles it.
+			wait, handle := page.HandleDialog()
+
+			// Wait for the dialog in a goroutine with a timeout.
+			type dialogResult struct {
+				evt *proto.PageJavascriptDialogOpening
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("Dialog %sed successfully", action)), nil
+			ch := make(chan dialogResult, 1)
+			go func() {
+				evt := wait()
+				ch <- dialogResult{evt: evt}
+			}()
+
+			select {
+			case dr := <-ch:
+				err = handle(&proto.PageHandleJavaScriptDialog{
+					Accept:     accept,
+					PromptText: promptText,
+				})
+				if err != nil {
+					return toolErr("handle dialog", err)
+				}
+				msg := fmt.Sprintf("Dialog %sed successfully (type: %s, message: %q)",
+					action, dr.evt.Type, dr.evt.Message)
+				return mcp.NewToolResultText(msg), nil
+			case <-time.After(30 * time.Second):
+				return mcp.NewToolResultText("No dialog appeared within timeout"), nil
+			}
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}

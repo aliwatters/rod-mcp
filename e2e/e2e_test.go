@@ -286,10 +286,11 @@ func truncate(s string, n int) string {
 }
 
 // navigate navigates to a URL and waits for the page body to be visible.
+// Uses a longer timeout to accommodate browser launch on first navigation.
 func (h *harness) navigate(url string) string {
 	h.t.Helper()
-	result := h.call("rod_navigate", map[string]any{"url": url})
-	h.call("rod_wait_for", map[string]any{"selector": "body", "timeout": 10000})
+	result := h.callWithTimeout("rod_navigate", map[string]any{"url": url}, 30*time.Second)
+	h.callWithTimeout("rod_wait_for", map[string]any{"selector": "body", "timeout": 15000}, 20*time.Second)
 	return result
 }
 
@@ -681,11 +682,29 @@ func TestE2E(t *testing.T) {
 	t.Run("handle_dialog", func(t *testing.T) {
 		h.navigate("https://the-internet.herokuapp.com/javascript_alerts")
 
-		// Dialog handling has a race condition — Chrome auto-dismisses alerts
-		// when no Page.javascriptDialogOpening listener is active.
-		// Verify the tool accepts valid params and returns a coherent response.
-		result := h.call("rod_handle_dialog", map[string]any{"action": "accept"})
-		assertContainsAny(t, result, "Dialog accepted", "No dialog is showing")
+		// rod_handle_dialog sets up a listener and blocks until a dialog appears.
+		// Send it first, then trigger the dialog — MCP processes requests concurrently.
+		handleID := h.send("tools/call", map[string]any{
+			"name":      "rod_handle_dialog",
+			"arguments": map[string]any{"action": "accept"},
+		})
+
+		// Trigger the alert (this will also block until dialog is dismissed).
+		clickID := h.send("tools/call", map[string]any{
+			"name":      "rod_evaluate",
+			"arguments": map[string]any{"script": `() => { document.querySelector("button[onclick='jsAlert()']").click(); return "clicked"; }`},
+		})
+
+		// handle_dialog should complete once the dialog is accepted.
+		handleResp := h.recv(handleID, 10*time.Second)
+		handleResult := h.extractText(handleResp)
+		assertContains(t, handleResult, "Dialog accepted successfully")
+		assertContains(t, handleResult, "alert")
+
+		// The evaluate call should now complete too.
+		clickResp := h.recv(clickID, 5*time.Second)
+		clickResult := h.extractText(clickResp)
+		assertContains(t, clickResult, "clicked")
 	})
 
 	t.Run("intercept_live_mock", func(t *testing.T) {
