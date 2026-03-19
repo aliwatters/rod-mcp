@@ -179,10 +179,38 @@ type ConsoleMessage struct {
 
 // NetworkRequest represents a captured network request with its response.
 type NetworkRequest struct {
-	Method string `json:"method"`
-	URL    string `json:"url"`
-	Status int    `json:"status"`
-	Type   string `json:"type"`
+	RequestID string `json:"requestId"`
+	Method    string `json:"method"`
+	URL       string `json:"url"`
+	Status    int    `json:"status"`
+	Type      string `json:"type"`
+}
+
+// InterceptRule defines a rule for how to handle an intercepted request.
+type InterceptRule struct {
+	URLPattern  string
+	Action      string // "mock", "block", "fail"
+	Status      int
+	Headers     []*proto.FetchHeaderEntry
+	Body        []byte
+	ErrorReason proto.NetworkErrorReason
+}
+
+// WebSocketConnection represents a tracked WebSocket connection.
+type WebSocketConnection struct {
+	RequestID     string `json:"requestId"`
+	URL           string `json:"url"`
+	Closed        bool   `json:"closed"`
+	SentCount     int    `json:"sentCount"`
+	ReceivedCount int    `json:"receivedCount"`
+}
+
+// WebSocketFrame represents a single captured WebSocket message.
+type WebSocketFrame struct {
+	URL         string `json:"url"`
+	Direction   string `json:"direction"` // "sent" or "received"
+	PayloadData string `json:"payloadData"`
+	Opcode      int    `json:"opcode"`
 }
 
 type Context struct {
@@ -197,6 +225,13 @@ type Context struct {
 	networkRequests []NetworkRequest
 	// pendingRequests tracks in-flight requests by ID for response correlation.
 	pendingRequests map[string]int
+	// Intercept state
+	interceptRules   []InterceptRule
+	interceptEnabled bool
+	// WebSocket tracking
+	wsConnections []WebSocketConnection
+	wsConnIndex   map[string]int // requestID → index in wsConnections
+	wsFrames      []WebSocketFrame
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
 }
@@ -400,9 +435,10 @@ func (ctx *Context) attachEventListeners(page *rod.Page) {
 		}
 		idx := len(ctx.networkRequests)
 		ctx.networkRequests = append(ctx.networkRequests, NetworkRequest{
-			Method: e.Request.Method,
-			URL:    e.Request.URL,
-			Type:   string(e.Type),
+			RequestID: string(e.RequestID),
+			Method:    e.Request.Method,
+			URL:       e.Request.URL,
+			Type:      string(e.Type),
 		})
 		ctx.pendingRequests[string(e.RequestID)] = idx
 		ctx.stateLock.Unlock()
@@ -412,6 +448,37 @@ func (ctx *Context) attachEventListeners(page *rod.Page) {
 			ctx.networkRequests[idx].Status = e.Response.Status
 			ctx.networkRequests[idx].Type = string(e.Type)
 			delete(ctx.pendingRequests, string(e.RequestID))
+		}
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkWebSocketCreated) {
+		ctx.stateLock.Lock()
+		if ctx.wsConnIndex == nil {
+			ctx.wsConnIndex = make(map[string]int)
+		}
+		ctx.wsConnIndex[string(e.RequestID)] = len(ctx.wsConnections)
+		ctx.wsConnections = append(ctx.wsConnections, WebSocketConnection{
+			RequestID: string(e.RequestID),
+			URL:       e.URL,
+		})
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkWebSocketFrameSent) {
+		ctx.stateLock.Lock()
+		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.wsConnections[idx].SentCount++
+			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "sent", e.Response)
+		}
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkWebSocketFrameReceived) {
+		ctx.stateLock.Lock()
+		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.wsConnections[idx].ReceivedCount++
+			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "received", e.Response)
+		}
+		ctx.stateLock.Unlock()
+	}, func(e *proto.NetworkWebSocketClosed) {
+		ctx.stateLock.Lock()
+		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.wsConnections[idx].Closed = true
 		}
 		ctx.stateLock.Unlock()
 	})()
@@ -471,6 +538,114 @@ func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) 
 	}
 
 	return result
+}
+
+const maxWSFrames = 10000
+
+// appendWSFrame adds a WebSocket frame, dropping the oldest if the buffer is full.
+// Must be called with stateLock held.
+func (ctx *Context) appendWSFrame(url, direction string, frame *proto.NetworkWebSocketFrame) {
+	if len(ctx.wsFrames) >= maxWSFrames {
+		// Drop oldest 10% to avoid frequent shifting
+		drop := maxWSFrames / 10
+		copy(ctx.wsFrames, ctx.wsFrames[drop:])
+		ctx.wsFrames = ctx.wsFrames[:len(ctx.wsFrames)-drop]
+	}
+	ctx.wsFrames = append(ctx.wsFrames, WebSocketFrame{
+		URL:         url,
+		Direction:   direction,
+		PayloadData: frame.PayloadData,
+		Opcode:      int(frame.Opcode),
+	})
+}
+
+// InterceptEnabled returns whether request interception is currently enabled.
+func (ctx *Context) InterceptEnabled() bool {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	return ctx.interceptEnabled
+}
+
+// SetInterceptEnabled sets whether interception is enabled.
+func (ctx *Context) SetInterceptEnabled(enabled bool) {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	ctx.interceptEnabled = enabled
+	if !enabled {
+		ctx.interceptRules = nil
+	}
+}
+
+// AddInterceptRule appends an interception rule.
+func (ctx *Context) AddInterceptRule(rule InterceptRule) {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	ctx.interceptRules = append(ctx.interceptRules, rule)
+}
+
+// InterceptRules returns a copy of the current interception rules.
+func (ctx *Context) InterceptRules() []InterceptRule {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	rules := make([]InterceptRule, len(ctx.interceptRules))
+	copy(rules, ctx.interceptRules)
+	return rules
+}
+
+// GetRequestID returns the CDP request ID for a network request at the given index.
+func (ctx *Context) GetRequestID(index int) (string, error) {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	if len(ctx.networkRequests) == 0 {
+		return "", fmt.Errorf("no network requests captured")
+	}
+	if index < 0 || index >= len(ctx.networkRequests) {
+		return "", fmt.Errorf("request index %d out of range (0-%d)", index, len(ctx.networkRequests)-1)
+	}
+	return ctx.networkRequests[index].RequestID, nil
+}
+
+// WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
+func (ctx *Context) WebSocketConnections(urlFilter string) []WebSocketConnection {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	var result []WebSocketConnection
+	for _, conn := range ctx.wsConnections {
+		if urlFilter != "" && !strings.Contains(conn.URL, urlFilter) {
+			continue
+		}
+		result = append(result, conn)
+	}
+	return result
+}
+
+// WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
+func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFrame {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+
+	var result []WebSocketFrame
+	for _, f := range ctx.wsFrames {
+		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
+			continue
+		}
+		if direction != "" && f.Direction != direction {
+			continue
+		}
+		result = append(result, f)
+	}
+	return result
+}
+
+// ClearWebSocketData clears all WebSocket connections and frames.
+func (ctx *Context) ClearWebSocketData() {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	ctx.wsConnections = nil
+	ctx.wsConnIndex = nil
+	ctx.wsFrames = nil
 }
 
 // TabInfo represents a tab's metadata for listing.
