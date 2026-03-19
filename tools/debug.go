@@ -50,9 +50,9 @@ var (
 				return toolErr("wait for condition", err)
 			}
 
-			selector, _ := request.Params.Arguments["selector"].(string)
-			text, _ := request.Params.Arguments["text"].(string)
-			state, _ := request.Params.Arguments["state"].(string)
+			selector, _ := request.GetArguments()["selector"].(string)
+			text, _ := request.GetArguments()["text"].(string)
+			state, _ := request.GetArguments()["state"].(string)
 
 			if selector == "" && text == "" {
 				return nil, errors.New("either 'selector' or 'text' is required")
@@ -63,7 +63,7 @@ var (
 			}
 
 			timeout := defaultWaitTimeoutMs
-			if t, ok := request.Params.Arguments["timeout"].(float64); ok && t > 0 {
+			if t, ok := request.GetArguments()["timeout"].(float64); ok && t > 0 {
 				timeout = t
 			}
 			timedPage := page.Timeout(time.Duration(timeout) * time.Millisecond)
@@ -123,8 +123,8 @@ var (
 
 	ConsoleMessagesHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			filterLevel, _ := request.Params.Arguments["level"].(string)
-			clear, _ := request.Params.Arguments["clear"].(bool)
+			filterLevel, _ := request.GetArguments()["level"].(string)
+			clear, _ := request.GetArguments()["clear"].(bool)
 
 			messages := rodCtx.ConsoleMessages(filterLevel, clear)
 			if len(messages) == 0 {
@@ -143,9 +143,9 @@ var (
 
 	NetworkRequestsHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			filterURL, _ := request.Params.Arguments["url"].(string)
-			filterMethod, _ := request.Params.Arguments["method"].(string)
-			clear, _ := request.Params.Arguments["clear"].(bool)
+			filterURL, _ := request.GetArguments()["url"].(string)
+			filterMethod, _ := request.GetArguments()["method"].(string)
+			clear, _ := request.GetArguments()["clear"].(bool)
 
 			requests := rodCtx.NetworkRequests(filterURL, filterMethod, clear)
 			if len(requests) == 0 {

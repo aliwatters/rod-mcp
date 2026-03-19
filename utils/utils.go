@@ -19,11 +19,11 @@ func QueryEleByAria(frame *rod.Page, selector string) (*rod.Element, error) {
 // 2. If it is present, iterates the elements and checks each is a string
 func OptionalStringArrayParam(r mcp.CallToolRequest, p string) ([]string, error) {
 	// Check if the parameter is present in the request
-	if _, ok := r.Params.Arguments[p]; !ok {
+	if _, ok := r.GetArguments()[p]; !ok {
 		return []string{}, nil
 	}
 
-	switch v := r.Params.Arguments[p].(type) {
+	switch v := r.GetArguments()[p].(type) {
 	case nil:
 		return []string{}, nil
 	case []string:
@@ -39,7 +39,7 @@ func OptionalStringArrayParam(r mcp.CallToolRequest, p string) ([]string, error)
 		}
 		return strSlice, nil
 	default:
-		return []string{}, fmt.Errorf("parameter %s could not be coerced to []string, is %T", p, r.Params.Arguments[p])
+		return []string{}, fmt.Errorf("parameter %s could not be coerced to []string, is %T", p, r.GetArguments()[p])
 	}
 }
 

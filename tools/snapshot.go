@@ -69,7 +69,7 @@ var (
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "click element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "click element")
 			if err != nil {
 				return toolErr("click element", err)
 			}
@@ -85,7 +85,7 @@ var (
 
 	HoverHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "hover element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "hover element")
 			if err != nil {
 				return toolErr("hover element", err)
 			}
@@ -101,12 +101,12 @@ var (
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "fill element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "fill element")
 			if err != nil {
 				return toolErr("fill element", err)
 			}
 
-			value, err := getStringArg(request.Params.Arguments, "value")
+			value, err := getStringArg(request.GetArguments(), "value")
 			if err != nil {
 				return toolErr("fill element "+ele, err)
 			}
@@ -119,7 +119,7 @@ var (
 			if err = element.Input(value); err != nil {
 				return toolErr("fill element "+ele, err)
 			}
-			if submit, ok := request.Params.Arguments["submit"].(bool); ok && submit {
+			if submit, ok := request.GetArguments()["submit"].(bool); ok && submit {
 				if err = element.Page().Keyboard.Press(input.Enter); err != nil {
 					return toolErr("submit element "+ele, err)
 				}
@@ -133,7 +133,7 @@ var (
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, element, ele, err := resolveSnapshotElement(rodCtx, request.Params.Arguments, "select option in element")
+			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "select option in element")
 			if err != nil {
 				return toolErr("select option", err)
 			}
