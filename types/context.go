@@ -220,7 +220,7 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 	if ctx.page == nil {
-		return nil, errors.New("No tab to used, call rod_navigate first")
+		return nil, errors.New("no active tab, call rod_navigate first")
 	}
 	return ctx.page, nil
 }
@@ -292,7 +292,7 @@ func (ctx *Context) BuildSnapshot() (string, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 	if ctx.page == nil {
-		return "", errors.New("No tab to capture snapshot, call rod_navigate first")
+		return "", errors.New("no active tab, call rod_navigate first")
 	}
 	snapshot, err := BuildSnapshot(ctx.page, ctx.config.CompactSnapshot)
 	if err != nil {
@@ -306,7 +306,7 @@ func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 	if ctx.snapshot == nil {
-		return nil, errors.New("No snapshot to used, call rod_snapshot first")
+		return nil, errors.New("no snapshot available, call rod_snapshot first")
 	}
 	return ctx.snapshot, nil
 }

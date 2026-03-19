@@ -41,11 +41,11 @@ var (
 				return toolErr("vision click", err)
 			}
 
-			x, err := getFloatArg(request.Params.Arguments, "x")
+			x, err := getFloatArg(request.GetArguments(), "x")
 			if err != nil {
 				return toolErr("vision click", err)
 			}
-			y, err := getFloatArg(request.Params.Arguments, "y")
+			y, err := getFloatArg(request.GetArguments(), "y")
 			if err != nil {
 				return toolErr("vision click", err)
 			}
@@ -70,15 +70,15 @@ var (
 				return toolErr("vision fill", err)
 			}
 
-			x, err := getFloatArg(request.Params.Arguments, "x")
+			x, err := getFloatArg(request.GetArguments(), "x")
 			if err != nil {
 				return toolErr("vision fill", err)
 			}
-			y, err := getFloatArg(request.Params.Arguments, "y")
+			y, err := getFloatArg(request.GetArguments(), "y")
 			if err != nil {
 				return toolErr("vision fill", err)
 			}
-			text, err := getStringArg(request.Params.Arguments, "text")
+			text, err := getStringArg(request.GetArguments(), "text")
 			if err != nil {
 				return toolErr("vision fill", err)
 			}
@@ -96,7 +96,7 @@ var (
 				return toolErr("vision fill type text", err)
 			}
 
-			if submit, ok := request.Params.Arguments["submit"].(bool); ok && submit {
+			if submit, ok := request.GetArguments()["submit"].(bool); ok && submit {
 				if err = page.Keyboard.Press(input.Enter); err != nil {
 					return toolErr("vision fill submit", err)
 				}

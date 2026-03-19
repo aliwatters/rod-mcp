@@ -38,7 +38,7 @@ var (
 			if err != nil {
 				return toolErr("press key", err)
 			}
-			keyStr, err := getStringArg(request.Params.Arguments, "key")
+			keyStr, err := getStringArg(request.GetArguments(), "key")
 			if err != nil {
 				return toolErr("press key", err)
 			}
@@ -57,8 +57,8 @@ var (
 
 	FileUploadHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			selector, _ := request.Params.Arguments["selector"].(string)
-			ref, _ := request.Params.Arguments["ref"].(string)
+			selector, _ := request.GetArguments()["selector"].(string)
+			ref, _ := request.GetArguments()["ref"].(string)
 
 			if selector == "" && ref == "" {
 				return nil, errors.New("either 'selector' or 'ref' is required")
