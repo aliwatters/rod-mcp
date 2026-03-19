@@ -82,7 +82,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		Set("use-mock-keychain").
 		Set("--remote-allow-origins", "*").
 		Set("--disable-dev-shm-usage").
-		Set("--disable-features", "HttpsUpgrades").
+		Set("--disable-features", "HttpsUpgrades,PasswordLeakDetection").
 		UserDataDir(userDataDir)
 
 	if cfg.BrowserBinPath != "" {
