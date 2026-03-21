@@ -2,13 +2,13 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
-	"github.com/pkg/errors"
 
 	"github.com/aliwatters/rod-mcp/utils"
 )
@@ -102,7 +102,7 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 
 	controlUrl, err := browserLauncher.Launch()
 	if err != nil {
-		return nil, "", errors.Wrap(err, "launch local browser failed")
+		return nil, "", fmt.Errorf("launch local browser: %w", err)
 	}
 	b, err := controlBrowser(ctx, controlUrl)
 	if err != nil {
@@ -134,12 +134,12 @@ func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error
 	if err != nil {
 		closeErr := browser.Close()
 		if closeErr != nil {
-			return nil, errors.Wrap(closeErr, "close browser after connect failure")
+			return nil, fmt.Errorf("close browser after connect failure: %w", closeErr)
 		}
-		return nil, errors.Wrap(err, "error connecting to browser")
+		return nil, fmt.Errorf("connect to browser: %w", err)
 	}
 	if err := browser.IgnoreCertErrors(true); err != nil {
-		return nil, errors.Wrap(err, "failed to set ignore certificate errors")
+		return nil, fmt.Errorf("set ignore certificate errors: %w", err)
 	}
 	return browser, nil
 }
