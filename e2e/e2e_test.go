@@ -689,28 +689,25 @@ func TestE2E(t *testing.T) {
 			"arguments": map[string]any{"action": "accept"},
 		})
 
-		// Give the server time to register the dialog listener before triggering
-		// the dialog. Without this delay, rod_evaluate can run first and open the
-		// dialog before HandleDialog() has registered its CDP event listener,
-		// causing "No dialog is showing" errors (flaky on CI).
-		time.Sleep(500 * time.Millisecond)
-
-		// Trigger the alert (this will also block until dialog is dismissed).
+		// Use setTimeout to trigger the dialog after a delay inside the browser.
+		// This eliminates the race between MCP request processing and CDP listener
+		// registration — the evaluate returns immediately and the dialog fires
+		// after the listener is guaranteed to be ready.
 		clickID := h.send("tools/call", map[string]any{
 			"name":      "rod_evaluate",
-			"arguments": map[string]any{"script": `() => { document.querySelector("button[onclick='jsAlert()']").click(); return "clicked"; }`},
+			"arguments": map[string]any{"script": `() => { setTimeout(() => document.querySelector("button[onclick='jsAlert()']").click(), 1000); return "scheduled"; }`},
 		})
 
-		// handle_dialog should complete once the dialog is accepted.
+		// The evaluate returns immediately with "scheduled".
+		clickResp := h.recv(clickID, 5*time.Second)
+		clickResult := h.extractText(clickResp)
+		assertContains(t, clickResult, "scheduled")
+
+		// handle_dialog should complete once the dialog appears and is accepted.
 		handleResp := h.recv(handleID, 10*time.Second)
 		handleResult := h.extractText(handleResp)
 		assertContains(t, handleResult, "Dialog accepted successfully")
 		assertContains(t, handleResult, "alert")
-
-		// The evaluate call should now complete too.
-		clickResp := h.recv(clickID, 5*time.Second)
-		clickResult := h.extractText(clickResp)
-		assertContains(t, clickResult, "clicked")
 	})
 
 	t.Run("semantic_click", func(t *testing.T) {
