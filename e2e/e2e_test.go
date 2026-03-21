@@ -710,10 +710,7 @@ func TestE2E(t *testing.T) {
 	t.Run("semantic_click", func(t *testing.T) {
 		h.navigate("https://the-internet.herokuapp.com/add_remove_elements/")
 
-		// Take a snapshot first so the ref index is built.
-		h.call("rod_snapshot", nil)
-
-		// Click using accessible name instead of ref.
+		// Click using accessible name — no prior snapshot needed (EnsureSnapshot builds one).
 		result := h.call("rod_click", map[string]any{
 			"element": "Add Element button",
 			"name":    "Add Element",

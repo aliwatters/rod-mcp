@@ -90,10 +90,12 @@ That's it. Your AI agent can now browse the web.
 | Tool | Description |
 |------|-------------|
 | `rod_snapshot` | Capture accessibility snapshot of the page |
-| `rod_click` | Click an element by snapshot reference |
-| `rod_hover` | Hover over an element |
-| `rod_fill` | Type text into an input field |
-| `rod_selector` | Select an option in a dropdown |
+| `rod_click` | Click an element by ref or accessible name/role |
+| `rod_hover` | Hover over an element by ref or accessible name/role |
+| `rod_fill` | Type text into an input field by ref or accessible name/role |
+| `rod_selector` | Select an option in a dropdown by ref or accessible name/role |
+
+> **Semantic targeting**: `rod_click`, `rod_hover`, `rod_fill`, and `rod_selector` accept `name` (accessible name, substring match) and `role` (ARIA role filter) as alternatives to `ref`. This enables one-step interactions without calling `rod_snapshot` first — e.g., `rod_click(element="Login button", name="Login", role="button")`.
 
 ### Page Interaction (Vision Mode)
 
@@ -129,6 +131,12 @@ That's it. Your AI agent can now browse the web.
 | `rod_tab_select` | Switch to a tab |
 | `rod_tab_close` | Close a tab |
 
+### Accessibility
+
+| Tool | Description |
+|------|-------------|
+| `rod_a11y_audit` | Audit page accessibility — find missing labels, heading order issues, WCAG violations |
+
 ### Debugging
 
 | Tool | Description |
@@ -136,13 +144,38 @@ That's it. Your AI agent can now browse the web.
 | `rod_wait_for` | Wait for a selector or text to appear |
 | `rod_console_messages` | Capture browser console output |
 | `rod_network_requests` | Capture network requests |
+| `rod_response_body` | Get the response body of a captured network request |
 
 ### Input
 
 | Tool | Description |
 |------|-------------|
 | `rod_press` | Press a keyboard key |
+| `rod_scroll` | Scroll the page or an element |
+| `rod_drag` | Drag and drop elements |
 | `rod_file_upload` | Upload files to a file input |
+
+### State & Storage
+
+| Tool | Description |
+|------|-------------|
+| `rod_cookies` | Get, set, or delete cookies |
+| `rod_storage` | Inspect localStorage and sessionStorage |
+| `rod_permissions` | Grant or reset browser permissions |
+
+### Network
+
+| Tool | Description |
+|------|-------------|
+| `rod_intercept` | Intercept, mock, block, or fail network requests |
+| `rod_websocket` | List WebSocket connections and inspect frames |
+
+### Performance
+
+| Tool | Description |
+|------|-------------|
+| `rod_performance` | Get page performance metrics and Core Web Vitals |
+| `rod_coverage` | Start/stop CSS and JS code coverage collection |
 
 ## Configuration
 
