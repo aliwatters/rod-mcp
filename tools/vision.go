@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -33,6 +34,17 @@ var (
 	)
 )
 
+// visionClickAt moves the mouse to (x, y) and clicks. Shared by click and fill handlers.
+func visionClickAt(page *rod.Page, x, y float64, op string) error {
+	if err := page.Mouse.MoveTo(proto.Point{X: x, Y: y}); err != nil {
+		return fmt.Errorf("%s move to (%.0f, %.0f): %w", op, x, y, err)
+	}
+	if err := page.Mouse.Click(proto.InputMouseButtonLeft, 1); err != nil {
+		return fmt.Errorf("%s click at (%.0f, %.0f): %w", op, x, y, err)
+	}
+	return nil
+}
+
 var (
 	VisionClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -50,11 +62,8 @@ var (
 				return toolErr("vision click", err)
 			}
 
-			if err = page.Mouse.MoveTo(proto.Point{X: x, Y: y}); err != nil {
-				return toolErr(fmt.Sprintf("vision click move to (%.0f, %.0f)", x, y), err)
-			}
-			if err = page.Mouse.Click(proto.InputMouseButtonLeft, 1); err != nil {
-				return toolErr(fmt.Sprintf("vision click at (%.0f, %.0f)", x, y), err)
+			if err = visionClickAt(page, x, y, "vision click"); err != nil {
+				return toolErr("vision click", err)
 			}
 
 			waitDOMStable(page)
@@ -83,15 +92,10 @@ var (
 				return toolErr("vision fill", err)
 			}
 
-			// Click to focus the input
-			if err = page.Mouse.MoveTo(proto.Point{X: x, Y: y}); err != nil {
-				return toolErr(fmt.Sprintf("vision fill move to (%.0f, %.0f)", x, y), err)
-			}
-			if err = page.Mouse.Click(proto.InputMouseButtonLeft, 1); err != nil {
-				return toolErr(fmt.Sprintf("vision fill click at (%.0f, %.0f)", x, y), err)
+			if err = visionClickAt(page, x, y, "vision fill"); err != nil {
+				return toolErr("vision fill", err)
 			}
 
-			// Type the text
 			if err = page.InsertText(text); err != nil {
 				return toolErr("vision fill type text", err)
 			}
