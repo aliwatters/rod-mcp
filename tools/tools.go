@@ -53,6 +53,7 @@ var (
 		WebSocket,
 		Performance,
 		Drag,
+		A11yAudit,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -87,6 +88,7 @@ var (
 		WebSocketToolKey:       WebSocketHandler,
 		PerformanceToolKey:     PerformanceHandler,
 		DragToolKey:            DragHandler,
+		A11yAuditToolKey:       A11yAuditHandler,
 	}
 )
 

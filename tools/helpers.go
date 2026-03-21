@@ -2,6 +2,7 @@ package tools
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -30,6 +31,10 @@ func waitDOMStable(page *rod.Page) {
 }
 
 // resolveSnapshotElement resolves a snapshot element reference from an MCP request.
+// Supports two targeting modes:
+//   - ref-based: uses the exact ref from a prior snapshot (fast, requires rod_snapshot first)
+//   - name-based: searches by accessible name/role, building a snapshot if needed (semantic targeting)
+//
 // Returns the page, resolved element, and the human-readable element description.
 func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, toolName string) (*rod.Page, *rod.Element, string, error) {
 	ele, err := getStringArg(args, "element")
@@ -40,15 +45,55 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 	if err != nil {
 		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
 	}
-	snapshot, err := rodCtx.LatestSnapshot()
-	if err != nil {
-		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
+
+	ref := getOptionalStringArg(args, "ref")
+	name := getOptionalStringArg(args, "name")
+
+	if ref == "" && name == "" {
+		return nil, nil, ele, fmt.Errorf("%s %s: either 'ref' or 'name' must be provided", toolName, ele)
 	}
-	ref, err := getStringArg(args, "ref")
-	if err != nil {
-		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
+
+	// If ref is provided, use the existing fast path.
+	if ref != "" {
+		snapshot, err := rodCtx.LatestSnapshot()
+		if err != nil {
+			return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
+		}
+		element, err := snapshot.LocatorInFrame(ref)
+		if err != nil {
+			return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
+		}
+		return page, element, ele, nil
 	}
-	element, err := snapshot.LocatorInFrame(ref)
+
+	// Name-based semantic targeting: build a snapshot and search by name/role.
+	snapshot, err := rodCtx.EnsureSnapshot()
+	if err != nil {
+		return nil, nil, ele, fmt.Errorf("%s %s: failed to build snapshot for semantic search: %w", toolName, ele, err)
+	}
+
+	role := getOptionalStringArg(args, "role")
+	matches := snapshot.FindByNameRole(name, role)
+
+	if len(matches) == 0 {
+		if role != "" {
+			return nil, nil, ele, fmt.Errorf("%s %s: no element found with name %q and role %q", toolName, ele, name, role)
+		}
+		return nil, nil, ele, fmt.Errorf("%s %s: no element found with name %q", toolName, ele, name)
+	}
+
+	if len(matches) > 1 {
+		var descriptions []string
+		for _, m := range matches {
+			descriptions = append(descriptions, fmt.Sprintf("  ref=%s  %s", m.Ref, m.Raw))
+		}
+		return nil, nil, ele, fmt.Errorf(
+			"%s %s: %d elements match name %q — use 'ref' to disambiguate:\n%s",
+			toolName, ele, len(matches), name, strings.Join(descriptions, "\n"),
+		)
+	}
+
+	element, err := snapshot.LocatorInFrame(matches[0].Ref)
 	if err != nil {
 		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
 	}

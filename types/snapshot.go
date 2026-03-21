@@ -34,9 +34,18 @@ const snapshotTpl = `
 - Page Snapshot
 ` + "```yaml\n" + "{{ .Snapshot }}" + "\n```\n"
 
+// RefEntry stores metadata about an interactive element in the ARIA snapshot.
+type RefEntry struct {
+	Ref   string // e.g. "e42" or "f1e42"
+	Role  string // e.g. "button", "link", "textbox"
+	Name  string // accessible name, e.g. "Login"
+	Raw   string // full scalar value
+}
+
 type Snapshot struct {
 	frames       []*rod.Page
 	textSnapshot string
+	refIndex     []RefEntry
 }
 
 func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
@@ -47,6 +56,9 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// Build the ref index before compaction (which may truncate names).
+	snapshot.refIndex = buildRefIndex(yamlDoc)
 
 	if compact {
 		yamlDoc = compactSnapshot(yamlDoc)
@@ -362,6 +374,109 @@ func truncateScalar(value string, maxLen int) string {
 	}
 
 	return value[:maxLen-3] + "..."
+}
+
+// FindByNameRole searches the ref index for elements matching the given
+// accessible name (case-insensitive substring) and optional ARIA role
+// (case-insensitive exact match). Returns matching entries.
+func (s *Snapshot) FindByNameRole(name, role string) []RefEntry {
+	var matches []RefEntry
+	nameLower := strings.ToLower(name)
+	roleLower := strings.ToLower(role)
+	for _, entry := range s.refIndex {
+		if role != "" && strings.ToLower(entry.Role) != roleLower {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(entry.Name), nameLower) {
+			continue
+		}
+		matches = append(matches, entry)
+	}
+	return matches
+}
+
+// buildRefIndex walks the YAML tree and extracts ref metadata from all
+// interactive elements (those with [ref=...] markers).
+func buildRefIndex(node *yaml.Node) []RefEntry {
+	var entries []RefEntry
+	collectRefEntries(node, &entries)
+	return entries
+}
+
+func collectRefEntries(node *yaml.Node, entries *[]RefEntry) {
+	if node == nil {
+		return
+	}
+	switch node.Kind {
+	case yaml.DocumentNode:
+		for _, child := range node.Content {
+			collectRefEntries(child, entries)
+		}
+	case yaml.MappingNode:
+		for i := 0; i < len(node.Content); i += 2 {
+			collectRefEntries(node.Content[i], entries)
+			collectRefEntries(node.Content[i+1], entries)
+		}
+	case yaml.SequenceNode:
+		for _, item := range node.Content {
+			collectRefEntries(item, entries)
+		}
+	case yaml.ScalarNode:
+		if entry, ok := parseRefScalar(node.Value); ok {
+			*entries = append(*entries, entry)
+		}
+	}
+}
+
+// parseRefScalar parses an ARIA snapshot scalar like:
+//
+//	`button "Login" [ref=e42]`
+//	`textbox "Email address" [ref=e15]`
+//	`link "Sign up" [ref=f1e7]`
+//
+// Returns the parsed RefEntry and true if the scalar contains a ref.
+func parseRefScalar(value string) (RefEntry, bool) {
+	refIdx := strings.Index(value, "[ref=")
+	if refIdx < 0 {
+		return RefEntry{}, false
+	}
+	refEnd := strings.Index(value[refIdx:], "]")
+	if refEnd < 0 {
+		return RefEntry{}, false
+	}
+	ref := value[refIdx+len("[ref=") : refIdx+refEnd]
+
+	// Parse role: first word before a space
+	var role string
+	spaceIdx := strings.Index(value, " ")
+	if spaceIdx > 0 {
+		role = value[:spaceIdx]
+	}
+
+	// Parse name: text between quotes
+	name := extractQuotedName(value)
+
+	return RefEntry{
+		Ref:  ref,
+		Role: role,
+		Name: name,
+		Raw:  value,
+	}, true
+}
+
+// extractQuotedName extracts the accessible name from between quotes in an
+// ARIA snapshot scalar. Handles both `"name"` patterns.
+func extractQuotedName(value string) string {
+	first := strings.Index(value, "\"")
+	if first < 0 {
+		return ""
+	}
+	rest := value[first+1:]
+	last := strings.Index(rest, "\"")
+	if last < 0 {
+		return ""
+	}
+	return rest[:last]
 }
 
 func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {

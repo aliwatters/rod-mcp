@@ -29,28 +29,36 @@ var (
 	)
 
 	Click = mcp.NewTool(ClickToolKey,
-		mcp.WithDescription("Perform click on a web page"),
+		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot) OR by accessible name/role for semantic targeting."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match). Used for semantic targeting without a prior snapshot.")),
+		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting (e.g. button, link, textbox). Optional, used to disambiguate.")),
 	)
 
 	Hover = mcp.NewTool(HoverToolKey,
-		mcp.WithDescription("Hover over an element to trigger CSS :hover states, tooltips, or dropdown menus"),
+		mcp.WithDescription("Hover over an element to trigger CSS :hover states, tooltips, or dropdown menus. Target by ref OR name/role."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
+		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 	)
 
 	Fill = mcp.NewTool(FillToolKey,
-		mcp.WithDescription("Type text into editable element"),
+		mcp.WithDescription("Type text into editable element. Target by ref OR name/role."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("value", mcp.Description("Text to type into the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
+		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 		mcp.WithBoolean("submit", mcp.Description("Whether to submit entered text (press Enter after)"), mcp.Required()),
 	)
 	Selector = mcp.NewTool(SelectorToolKey,
-		mcp.WithDescription("Select an option in a dropdown"),
+		mcp.WithDescription("Select an option in a dropdown. Target by ref OR name/role."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot"), mcp.Required()),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
+		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 		mcp.WithArray("values", mcp.Description("Array of values to select in the dropdown. This can be a single value or multiple values."), mcp.Items(map[string]interface{}{"type": "string"}), mcp.Required()),
 	)
 )
