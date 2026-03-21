@@ -235,15 +235,14 @@ func buildJSAuditScript(selector string) string {
 				input.closest('label') ||
 				input.getAttribute('aria-label') ||
 				input.getAttribute('aria-labelledby') ||
-				input.getAttribute('title') ||
-				input.getAttribute('placeholder');
+				input.getAttribute('title');
 			if (!hasLabel) {
 				issues.push({
 					severity: 'error',
 					rule: 'input-label',
 					element: input.outerHTML.substring(0, 120),
 					selector: cssPath(input),
-					message: 'Form input missing associated label, aria-label, or placeholder'
+					message: 'Form input missing associated label, aria-label, aria-labelledby, or title'
 				});
 			}
 		});
@@ -314,12 +313,18 @@ func buildJSAuditScript(selector string) string {
 	}`, root)
 }
 
-// deduplicateIssues removes duplicate issues (same rule + selector).
+// deduplicateIssues removes duplicate issues. Uses selector as the primary
+// location key; falls back to element + message for issues without selectors
+// (e.g. heading-order, landmark-unique) to avoid collapsing distinct occurrences.
 func deduplicateIssues(issues []a11yIssue) []a11yIssue {
 	seen := make(map[string]bool)
 	var result []a11yIssue
 	for _, issue := range issues {
-		key := issue.Rule + "|" + issue.Selector + "|" + issue.Message
+		loc := issue.Selector
+		if loc == "" {
+			loc = issue.Element
+		}
+		key := issue.Rule + "|" + loc + "|" + issue.Message
 		if seen[key] {
 			continue
 		}

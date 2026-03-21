@@ -34,8 +34,8 @@ const snapshotTpl = `
 - Page Snapshot
 ` + "```yaml\n" + "{{ .Snapshot }}" + "\n```\n"
 
-// refEntry stores metadata about an interactive element in the ARIA snapshot.
-type refEntry struct {
+// RefEntry stores metadata about an interactive element in the ARIA snapshot.
+type RefEntry struct {
 	Ref   string // e.g. "e42" or "f1e42"
 	Role  string // e.g. "button", "link", "textbox"
 	Name  string // accessible name, e.g. "Login"
@@ -45,7 +45,7 @@ type refEntry struct {
 type Snapshot struct {
 	frames       []*rod.Page
 	textSnapshot string
-	refIndex     []refEntry
+	refIndex     []RefEntry
 }
 
 func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
@@ -379,8 +379,8 @@ func truncateScalar(value string, maxLen int) string {
 // FindByNameRole searches the ref index for elements matching the given
 // accessible name (case-insensitive substring) and optional ARIA role
 // (case-insensitive exact match). Returns matching entries.
-func (s *Snapshot) FindByNameRole(name, role string) []refEntry {
-	var matches []refEntry
+func (s *Snapshot) FindByNameRole(name, role string) []RefEntry {
+	var matches []RefEntry
 	nameLower := strings.ToLower(name)
 	roleLower := strings.ToLower(role)
 	for _, entry := range s.refIndex {
@@ -397,13 +397,13 @@ func (s *Snapshot) FindByNameRole(name, role string) []refEntry {
 
 // buildRefIndex walks the YAML tree and extracts ref metadata from all
 // interactive elements (those with [ref=...] markers).
-func buildRefIndex(node *yaml.Node) []refEntry {
-	var entries []refEntry
+func buildRefIndex(node *yaml.Node) []RefEntry {
+	var entries []RefEntry
 	collectRefEntries(node, &entries)
 	return entries
 }
 
-func collectRefEntries(node *yaml.Node, entries *[]refEntry) {
+func collectRefEntries(node *yaml.Node, entries *[]RefEntry) {
 	if node == nil {
 		return
 	}
@@ -434,15 +434,15 @@ func collectRefEntries(node *yaml.Node, entries *[]refEntry) {
 //	`textbox "Email address" [ref=e15]`
 //	`link "Sign up" [ref=f1e7]`
 //
-// Returns the parsed refEntry and true if the scalar contains a ref.
-func parseRefScalar(value string) (refEntry, bool) {
+// Returns the parsed RefEntry and true if the scalar contains a ref.
+func parseRefScalar(value string) (RefEntry, bool) {
 	refIdx := strings.Index(value, "[ref=")
 	if refIdx < 0 {
-		return refEntry{}, false
+		return RefEntry{}, false
 	}
 	refEnd := strings.Index(value[refIdx:], "]")
 	if refEnd < 0 {
-		return refEntry{}, false
+		return RefEntry{}, false
 	}
 	ref := value[refIdx+len("[ref=") : refIdx+refEnd]
 
@@ -456,7 +456,7 @@ func parseRefScalar(value string) (refEntry, bool) {
 	// Parse name: text between quotes
 	name := extractQuotedName(value)
 
-	return refEntry{
+	return RefEntry{
 		Ref:  ref,
 		Role: role,
 		Name: name,
