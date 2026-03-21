@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/log"
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -42,171 +43,20 @@ var (
 			if err != nil {
 				return toolErr("intercept", err)
 			}
-			args := request.GetArguments()
 
 			switch action {
 			case "enable":
-				err := proto.FetchEnable{
-					Patterns: []*proto.FetchRequestPattern{
-						{URLPattern: "*"},
-					},
-				}.Call(page)
-				if err != nil {
-					return toolErr("enable request interception", err)
-				}
-
-				rodCtx.SetInterceptEnabled(true)
-
-				// Start event listener for paused requests
-				go page.EachEvent(func(e *proto.FetchRequestPaused) {
-					rules := rodCtx.InterceptRules()
-
-					for _, rule := range rules {
-						if matchURLPattern(e.Request.URL, rule.URLPattern) {
-							switch rule.Action {
-							case "mock":
-								if err := (proto.FetchFulfillRequest{
-									RequestID:       e.RequestID,
-									ResponseCode:    rule.Status,
-									ResponseHeaders: rule.Headers,
-									Body:            rule.Body,
-								}).Call(page); err != nil {
-									log.Debugf("fulfill request %s: %s", e.RequestID, err)
-								}
-								return
-							case "block", "fail":
-								reason := rule.ErrorReason
-								if reason == "" {
-									reason = proto.NetworkErrorReasonBlockedByClient
-								}
-								if err := (proto.FetchFailRequest{
-									RequestID:   e.RequestID,
-									ErrorReason: reason,
-								}).Call(page); err != nil {
-									log.Debugf("fail request %s: %s", e.RequestID, err)
-								}
-								return
-							}
-						}
-					}
-					// No matching rule — continue the request
-					if err := (proto.FetchContinueRequest{
-						RequestID: e.RequestID,
-					}).Call(page); err != nil {
-						log.Debugf("continue request %s: %s", e.RequestID, err)
-					}
-				})()
-
-				return mcp.NewToolResultText("Request interception enabled"), nil
-
+				return interceptEnable(rodCtx, page)
 			case "mock":
-				if !rodCtx.InterceptEnabled() {
-					return toolErr("intercept mock", fmt.Errorf("interception not enabled, call with action=enable first"))
-				}
-				urlPattern, err := getStringArg(args, "urlPattern")
-				if err != nil {
-					return toolErr("intercept mock", err)
-				}
-				status := int(getOptionalFloatArg(args, "status", 200))
-				body := getOptionalStringArg(args, "body")
-
-				var headers []*proto.FetchHeaderEntry
-				if h, ok := args["headers"].(map[string]interface{}); ok {
-					for k, v := range h {
-						headers = append(headers, &proto.FetchHeaderEntry{
-							Name:  k,
-							Value: fmt.Sprintf("%v", v),
-						})
-					}
-				}
-				if len(headers) == 0 {
-					headers = []*proto.FetchHeaderEntry{
-						{Name: "Content-Type", Value: "application/json"},
-					}
-				}
-
-				rodCtx.AddInterceptRule(types.InterceptRule{
-					URLPattern: urlPattern,
-					Action:     "mock",
-					Status:     status,
-					Headers:    headers,
-					Body:       []byte(body),
-				})
-
-				return mcp.NewToolResultText(fmt.Sprintf("Mock rule added: %s → %d", urlPattern, status)), nil
-
+				return interceptMock(rodCtx, request.GetArguments())
 			case "block":
-				if !rodCtx.InterceptEnabled() {
-					return toolErr("intercept block", fmt.Errorf("interception not enabled, call with action=enable first"))
-				}
-				urlPattern, err := getStringArg(args, "urlPattern")
-				if err != nil {
-					return toolErr("intercept block", err)
-				}
-
-				rodCtx.AddInterceptRule(types.InterceptRule{
-					URLPattern:  urlPattern,
-					Action:      "block",
-					ErrorReason: proto.NetworkErrorReasonBlockedByClient,
-				})
-
-				return mcp.NewToolResultText(fmt.Sprintf("Block rule added: %s", urlPattern)), nil
-
+				return interceptBlock(rodCtx, request.GetArguments())
 			case "fail":
-				if !rodCtx.InterceptEnabled() {
-					return toolErr("intercept fail", fmt.Errorf("interception not enabled, call with action=enable first"))
-				}
-				urlPattern, err := getStringArg(args, "urlPattern")
-				if err != nil {
-					return toolErr("intercept fail", err)
-				}
-				reason := getOptionalStringArg(args, "errorReason")
-				if reason == "" {
-					reason = "Failed"
-				}
-
-				rodCtx.AddInterceptRule(types.InterceptRule{
-					URLPattern:  urlPattern,
-					Action:      "fail",
-					ErrorReason: proto.NetworkErrorReason(reason),
-				})
-
-				return mcp.NewToolResultText(fmt.Sprintf("Fail rule added: %s → %s", urlPattern, reason)), nil
-
+				return interceptFail(rodCtx, request.GetArguments())
 			case "list":
-				rules := rodCtx.InterceptRules()
-				enabled := rodCtx.InterceptEnabled()
-
-				if !enabled {
-					return mcp.NewToolResultText("Interception is not enabled"), nil
-				}
-				if len(rules) == 0 {
-					return mcp.NewToolResultText("Interception enabled, no rules configured"), nil
-				}
-
-				var result strings.Builder
-				result.WriteString(fmt.Sprintf("Interception rules (%d):\n", len(rules)))
-				for i, r := range rules {
-					switch r.Action {
-					case "mock":
-						result.WriteString(fmt.Sprintf("  %d. MOCK %s → %d\n", i+1, r.URLPattern, r.Status))
-					case "block":
-						result.WriteString(fmt.Sprintf("  %d. BLOCK %s\n", i+1, r.URLPattern))
-					case "fail":
-						result.WriteString(fmt.Sprintf("  %d. FAIL %s → %s\n", i+1, r.URLPattern, r.ErrorReason))
-					}
-				}
-				return mcp.NewToolResultText(result.String()), nil
-
+				return interceptList(rodCtx)
 			case "disable":
-				err := proto.FetchDisable{}.Call(page)
-				if err != nil {
-					return toolErr("disable request interception", err)
-				}
-				rodCtx.SetInterceptEnabled(false)
-
-				return mcp.NewToolResultText("Request interception disabled and rules cleared"), nil
-
+				return interceptDisable(rodCtx, page)
 			default:
 				return nil, fmt.Errorf("invalid action %q: must be enable, mock, block, fail, list, or disable", action)
 			}
@@ -215,8 +65,172 @@ var (
 	}
 )
 
+func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult, error) {
+	err := proto.FetchEnable{
+		Patterns: []*proto.FetchRequestPattern{
+			{URLPattern: "*"},
+		},
+	}.Call(page)
+	if err != nil {
+		return toolErr("enable request interception", err)
+	}
+
+	rodCtx.SetInterceptEnabled(true)
+
+	go page.EachEvent(func(e *proto.FetchRequestPaused) {
+		rules := rodCtx.InterceptRules()
+
+		for _, rule := range rules {
+			if matchURLPattern(e.Request.URL, rule.URLPattern) {
+				switch rule.Action {
+				case "mock":
+					if err := (proto.FetchFulfillRequest{
+						RequestID:       e.RequestID,
+						ResponseCode:    rule.Status,
+						ResponseHeaders: rule.Headers,
+						Body:            rule.Body,
+					}).Call(page); err != nil {
+						log.Debugf("fulfill request %s: %s", e.RequestID, err)
+					}
+					return
+				case "block", "fail":
+					reason := rule.ErrorReason
+					if reason == "" {
+						reason = proto.NetworkErrorReasonBlockedByClient
+					}
+					if err := (proto.FetchFailRequest{
+						RequestID:   e.RequestID,
+						ErrorReason: reason,
+					}).Call(page); err != nil {
+						log.Debugf("fail request %s: %s", e.RequestID, err)
+					}
+					return
+				}
+			}
+		}
+		if err := (proto.FetchContinueRequest{
+			RequestID: e.RequestID,
+		}).Call(page); err != nil {
+			log.Debugf("continue request %s: %s", e.RequestID, err)
+		}
+	})()
+
+	return mcp.NewToolResultText("Request interception enabled"), nil
+}
+
+func interceptMock(rodCtx *types.Context, args map[string]any) (*mcp.CallToolResult, error) {
+	if !rodCtx.InterceptEnabled() {
+		return toolErr("intercept mock", fmt.Errorf("interception not enabled, call with action=enable first"))
+	}
+	urlPattern, err := getStringArg(args, "urlPattern")
+	if err != nil {
+		return toolErr("intercept mock", err)
+	}
+	status := int(getOptionalFloatArg(args, "status", 200))
+	body := getOptionalStringArg(args, "body")
+
+	var headers []*proto.FetchHeaderEntry
+	if h, ok := args["headers"].(map[string]interface{}); ok {
+		for k, v := range h {
+			headers = append(headers, &proto.FetchHeaderEntry{
+				Name:  k,
+				Value: fmt.Sprintf("%v", v),
+			})
+		}
+	}
+	if len(headers) == 0 {
+		headers = []*proto.FetchHeaderEntry{
+			{Name: "Content-Type", Value: "application/json"},
+		}
+	}
+
+	rodCtx.AddInterceptRule(types.InterceptRule{
+		URLPattern: urlPattern,
+		Action:     "mock",
+		Status:     status,
+		Headers:    headers,
+		Body:       []byte(body),
+	})
+
+	return mcp.NewToolResultText(fmt.Sprintf("Mock rule added: %s → %d", urlPattern, status)), nil
+}
+
+func interceptBlock(rodCtx *types.Context, args map[string]any) (*mcp.CallToolResult, error) {
+	if !rodCtx.InterceptEnabled() {
+		return toolErr("intercept block", fmt.Errorf("interception not enabled, call with action=enable first"))
+	}
+	urlPattern, err := getStringArg(args, "urlPattern")
+	if err != nil {
+		return toolErr("intercept block", err)
+	}
+
+	rodCtx.AddInterceptRule(types.InterceptRule{
+		URLPattern:  urlPattern,
+		Action:      "block",
+		ErrorReason: proto.NetworkErrorReasonBlockedByClient,
+	})
+
+	return mcp.NewToolResultText(fmt.Sprintf("Block rule added: %s", urlPattern)), nil
+}
+
+func interceptFail(rodCtx *types.Context, args map[string]any) (*mcp.CallToolResult, error) {
+	if !rodCtx.InterceptEnabled() {
+		return toolErr("intercept fail", fmt.Errorf("interception not enabled, call with action=enable first"))
+	}
+	urlPattern, err := getStringArg(args, "urlPattern")
+	if err != nil {
+		return toolErr("intercept fail", err)
+	}
+	reason := getOptionalStringArg(args, "errorReason")
+	if reason == "" {
+		reason = "Failed"
+	}
+
+	rodCtx.AddInterceptRule(types.InterceptRule{
+		URLPattern:  urlPattern,
+		Action:      "fail",
+		ErrorReason: proto.NetworkErrorReason(reason),
+	})
+
+	return mcp.NewToolResultText(fmt.Sprintf("Fail rule added: %s → %s", urlPattern, reason)), nil
+}
+
+func interceptList(rodCtx *types.Context) (*mcp.CallToolResult, error) {
+	rules := rodCtx.InterceptRules()
+	enabled := rodCtx.InterceptEnabled()
+
+	if !enabled {
+		return mcp.NewToolResultText("Interception is not enabled"), nil
+	}
+	if len(rules) == 0 {
+		return mcp.NewToolResultText("Interception enabled, no rules configured"), nil
+	}
+
+	var result strings.Builder
+	result.WriteString(fmt.Sprintf("Interception rules (%d):\n", len(rules)))
+	for i, r := range rules {
+		switch r.Action {
+		case "mock":
+			result.WriteString(fmt.Sprintf("  %d. MOCK %s → %d\n", i+1, r.URLPattern, r.Status))
+		case "block":
+			result.WriteString(fmt.Sprintf("  %d. BLOCK %s\n", i+1, r.URLPattern))
+		case "fail":
+			result.WriteString(fmt.Sprintf("  %d. FAIL %s → %s\n", i+1, r.URLPattern, r.ErrorReason))
+		}
+	}
+	return mcp.NewToolResultText(result.String()), nil
+}
+
+func interceptDisable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult, error) {
+	err := proto.FetchDisable{}.Call(page)
+	if err != nil {
+		return toolErr("disable request interception", err)
+	}
+	rodCtx.SetInterceptEnabled(false)
+	return mcp.NewToolResultText("Request interception disabled and rules cleared"), nil
+}
+
 // matchURLPattern matches a URL against a simple wildcard pattern.
-// * matches zero or more characters, ? matches exactly one character.
 func matchURLPattern(url, pattern string) bool {
 	return utils.MatchWildcard(url, pattern)
 }
