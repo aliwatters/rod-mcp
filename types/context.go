@@ -356,6 +356,25 @@ func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
 	return ctx.snapshot, nil
 }
 
+// EnsureSnapshot returns the latest snapshot, building one if none exists.
+func (ctx *Context) EnsureSnapshot() (*Snapshot, error) {
+	ctx.stateLock.Lock()
+	if ctx.snapshot != nil {
+		s := ctx.snapshot
+		ctx.stateLock.Unlock()
+		return s, nil
+	}
+	ctx.stateLock.Unlock()
+
+	// Build a new snapshot (BuildSnapshot acquires stateLock internally).
+	if _, err := ctx.BuildSnapshot(); err != nil {
+		return nil, err
+	}
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	return ctx.snapshot, nil
+}
+
 func (ctx *Context) CloseBrowser() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()

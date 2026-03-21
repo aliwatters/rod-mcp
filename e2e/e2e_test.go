@@ -707,6 +707,70 @@ func TestE2E(t *testing.T) {
 		assertContains(t, clickResult, "clicked")
 	})
 
+	t.Run("semantic_click", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com/add_remove_elements/")
+
+		// Take a snapshot first so the ref index is built.
+		h.call("rod_snapshot", nil)
+
+		// Click using accessible name instead of ref.
+		result := h.call("rod_click", map[string]any{
+			"element": "Add Element button",
+			"name":    "Add Element",
+		})
+		assertContains(t, result, "Click element")
+
+		// Verify the button was clicked by checking a new element appeared.
+		result = h.call("rod_snapshot", nil)
+		assertContains(t, result, "Delete")
+	})
+
+	t.Run("semantic_click_with_role", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com/login")
+
+		// Click using name + role for disambiguation.
+		result := h.call("rod_click", map[string]any{
+			"element": "Login button",
+			"name":    "Login",
+			"role":    "button",
+		})
+		assertContainsAny(t, result, "Click element", "click element")
+	})
+
+	t.Run("semantic_fill", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com/login")
+
+		// Fill using accessible name + role to disambiguate from heading text.
+		result := h.call("rod_fill", map[string]any{
+			"element": "Username field",
+			"name":    "Username",
+			"role":    "textbox",
+			"value":   "tomsmith",
+			"submit":  false,
+		})
+		assertContains(t, result, "Fill out element")
+	})
+
+	t.Run("a11y_audit", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com")
+
+		result := h.call("rod_a11y_audit", nil)
+		// The audit should return a JSON report with summary.
+		assertContains(t, result, "summary")
+		assertContains(t, result, "elements_scanned")
+		assertContains(t, result, "coverage")
+	})
+
+	t.Run("a11y_audit_with_selector", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com/login")
+
+		result := h.call("rod_a11y_audit", map[string]any{
+			"selector": "form#login",
+		})
+		assertContains(t, result, "summary")
+		assertContains(t, result, "elements_scanned")
+	})
+
 	t.Run("intercept_live_mock", func(t *testing.T) {
 		result := h.call("rod_intercept", map[string]any{"action": "enable"})
 		assertContains(t, result, "enabled")
