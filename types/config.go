@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/aliwatters/rod-mcp/utils"
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 )
 
@@ -102,14 +101,14 @@ func LoadConfig(configPath string) (*Config, error) {
 	if configPath == "" {
 		configPath = filepath.Join("./", ConfigName)
 		if err := InitDefaultConfig(); err != nil {
-			return nil, errors.Wrapf(err, "init default config failed")
+			return nil, fmt.Errorf("init default config %s: %w", configPath, err)
 		}
 	}
 
 	// check if config file exist
 	exist, err := utils.PathExists(configPath)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not open config file")
+		return nil, fmt.Errorf("check config file %s: %w", configPath, err)
 	}
 
 	if !exist {
@@ -118,14 +117,14 @@ func LoadConfig(configPath string) (*Config, error) {
 
 	file, err := os.Open(configPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open config %s: %w", configPath, err)
 	}
 	defer file.Close()
 
 	decoder := yaml.NewDecoder(file)
 	config := DefaultConfig
 	if err := decoder.Decode(&config); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode config %s: %w", configPath, err)
 	}
 	return &config, nil
 }

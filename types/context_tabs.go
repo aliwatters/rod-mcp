@@ -1,10 +1,10 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/go-rod/rod"
-	"github.com/pkg/errors"
 )
 
 // TabInfo represents a tab's metadata for listing.
@@ -47,14 +47,14 @@ func (ctx *Context) ListTabs() ([]TabInfo, error) {
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list tabs")
+		return nil, fmt.Errorf("list tabs: %w", err)
 	}
 
 	tabs := make([]TabInfo, 0, len(pages))
 	for i, p := range pages {
 		info, err := p.Info()
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get tab info")
+			return nil, fmt.Errorf("get tab info: %w", err)
 		}
 		tabs = append(tabs, TabInfo{
 			Index:    i,
@@ -76,7 +76,7 @@ func (ctx *Context) SelectTab(index int) (*rod.Page, error) {
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to list tabs")
+		return nil, fmt.Errorf("list tabs: %w", err)
 	}
 	if index < 0 || index >= len(pages) {
 		return nil, fmt.Errorf("tab index %d out of range (0-%d)", index, len(pages)-1)
@@ -96,7 +96,7 @@ func (ctx *Context) CloseTab(index int) error {
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {
-		return errors.Wrap(err, "failed to list tabs")
+		return fmt.Errorf("list tabs: %w", err)
 	}
 	if index < 0 || index >= len(pages) {
 		return fmt.Errorf("tab index %d out of range (0-%d)", index, len(pages)-1)
@@ -109,14 +109,14 @@ func (ctx *Context) CloseTab(index int) error {
 	isActive := ctx.page != nil && target.TargetID == ctx.page.TargetID
 
 	if err := target.Close(); err != nil {
-		return errors.Wrap(err, "failed to close tab")
+		return fmt.Errorf("close tab: %w", err)
 	}
 
 	if isActive {
 		// Switch to nearest tab
 		remaining, err := ctx.browser.Pages()
 		if err != nil {
-			return errors.Wrap(err, "failed to list tabs after close")
+			return fmt.Errorf("list tabs after close: %w", err)
 		}
 		if len(remaining) > 0 {
 			newIndex := index

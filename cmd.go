@@ -2,12 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/aliwatters/rod-mcp/banner"
-	"github.com/aliwatters/rod-mcp/types"
-	"github.com/pkg/errors"
-	"github.com/urfave/cli/v2"
 	"os"
 	"strings"
+
+	"github.com/aliwatters/rod-mcp/banner"
+	"github.com/aliwatters/rod-mcp/types"
+	"github.com/urfave/cli/v2"
 )
 
 type SubCfg struct {
@@ -126,7 +126,7 @@ func RunCmd() (*SubCfg, error) {
 	}
 	err := cmd.Run(os.Args)
 	if err != nil {
-		return nil, errors.Wrapf(err, "run cmd error")
+		return nil, fmt.Errorf("run cmd: %w", err)
 	}
 	return &subConfig, nil
 }

@@ -1,11 +1,11 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"github.com/go-rod/rod"
 	"github.com/aliwatters/rod-mcp/types/js"
 	"github.com/aliwatters/rod-mcp/utils"
-	"github.com/pkg/errors"
 	"gopkg.in/yaml.v3"
 	"regexp"
 	"strconv"
@@ -66,12 +66,12 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 
 	yamlBytes, err := yaml.Marshal(yamlDoc)
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed,because of yaml marshal")
+		return nil, fmt.Errorf("snapshot yaml marshal: %w", err)
 	}
 
 	pageInfo, err := p.Info()
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed")
+		return nil, fmt.Errorf("snapshot page info: %w", err)
 	}
 
 	tplInfo := map[string]any{
@@ -82,7 +82,7 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 	}
 	res, err := utils.ExecuteTemplate(snapshotTpl, tplInfo)
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed, because of template exec failed")
+		return nil, fmt.Errorf("snapshot template exec: %w", err)
 	}
 	snapshot.textSnapshot = res
 	return snapshot, nil
@@ -98,14 +98,14 @@ func (s *Snapshot) captureSnapshotWithFrames(p *rod.Page) (*yaml.Node, error) {
 
 	rawSnapshot, err := p.Eval(js.AriaSnapshot, "document.body", "({ref: true})")
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed, frame index: %d", frameIndex)
+		return nil, fmt.Errorf("snapshot frame %d eval: %w", frameIndex, err)
 	}
 
 	var snapNode yaml.Node
 
 	err = yaml.Unmarshal([]byte(rawSnapshot.Value.String()), &snapNode)
 	if err != nil {
-		return nil, errors.Wrapf(err, "capture snapshot with frames failed, frame index: %d", frameIndex)
+		return nil, fmt.Errorf("snapshot frame %d yaml unmarshal: %w", frameIndex, err)
 	}
 	return s.walk(&snapNode, frameIndex, p)
 
@@ -488,18 +488,18 @@ func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {
 	if len(matches) > 0 {
 		frameIndex, err := strconv.Atoi(matches[1])
 		if err != nil {
-			return nil, errors.Wrapf(err, "locator frame failed, because of frame index is not number")
+			return nil, fmt.Errorf("locator frame index parse: %w", err)
 		}
 
 		if frameIndex < 0 || frameIndex >= len(s.frames) {
-			return nil, errors.Errorf("frame index %d out of range (0-%d)", frameIndex, len(s.frames)-1)
+			return nil, fmt.Errorf("frame index %d out of range (0-%d)", frameIndex, len(s.frames)-1)
 		}
 		frame = s.frames[frameIndex]
 		ref = matches[2]
 	}
 	ele, err := utils.QueryEleByAria(frame, ref)
 	if err != nil {
-		return nil, errors.Wrapf(err, "locator frame failed, because of query element by aria failed")
+		return nil, fmt.Errorf("locator frame query element by aria: %w", err)
 	}
 	return ele, nil
 

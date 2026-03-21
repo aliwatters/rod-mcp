@@ -8,12 +8,13 @@ import (
 	"sync"
 	"time"
 
+	"errors"
+
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/pkg/errors"
 
 	"github.com/aliwatters/rod-mcp/types/js"
 	"github.com/aliwatters/rod-mcp/utils"
@@ -224,7 +225,7 @@ func (ctx *Context) closePage() error {
 	}
 	err := ctx.page.Close()
 	if err != nil {
-		return errors.Wrap(err, "close page failed")
+		return fmt.Errorf("close page: %w", err)
 	}
 	ctx.page = nil
 	return nil
@@ -242,7 +243,7 @@ func (ctx *Context) closeBrowser() error {
 
 	err = ctx.browser.Close()
 	if err != nil {
-		return errors.Wrap(err, "close browser failed")
+		return fmt.Errorf("close browser: %w", err)
 	}
 	ctx.browser = nil
 	return nil
@@ -252,17 +253,17 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	targetURL := strings.Join(urls, "/")
 	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
 	if err != nil {
-		return nil, errors.Wrap(err, "create page failed")
+		return nil, fmt.Errorf("create page: %w", err)
 	}
 	if _, err := page.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
-		return nil, errors.Wrap(err, "inject snapshot script failed")
+		return nil, fmt.Errorf("inject snapshot script: %w", err)
 	}
 
 	// Apply HTTP headers from config (global + domain-specific)
 	allHeaders := ctx.config.GetHeadersForURL(targetURL)
 	if len(allHeaders) > 0 {
 		if _, err := page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
-			return nil, errors.Wrap(err, "set extra HTTP headers failed")
+			return nil, fmt.Errorf("set extra HTTP headers: %w", err)
 		}
 	}
 
@@ -281,7 +282,7 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 	allHeaders := ctx.config.GetHeadersForURL(url)
 	if len(allHeaders) > 0 {
 		if _, err := ctx.page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
-			return errors.Wrap(err, "set extra HTTP headers failed")
+			return fmt.Errorf("set extra HTTP headers: %w", err)
 		}
 	}
 	return nil
