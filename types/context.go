@@ -3,153 +3,21 @@ package types
 import (
 	"context"
 	"fmt"
-	"github.com/charmbracelet/log"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+	"github.com/pkg/errors"
+
 	"github.com/aliwatters/rod-mcp/types/js"
 	"github.com/aliwatters/rod-mcp/utils"
-	"github.com/go-rod/rod/lib/launcher"
-	"github.com/go-rod/rod/lib/proto"
-	"github.com/pkg/errors"
 )
-
-// launchBrowser starts a new Chrome instance. When a user-data-dir is configured
-// and cloning is enabled (the default), the profile is cloned to a temp directory
-// whose path is returned as clonedDir so the caller can clean it up on exit.
-func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clonedDir string, err error) {
-
-	if cfg.CDPEndpoint != "" {
-		b, err := controlBrowser(ctx, cfg.CDPEndpoint)
-		return b, "", err
-	}
-
-	// Validate flag combinations.
-	if cfg.UserDataDir == "" && (cfg.NoClone || cfg.CloneAll || len(cfg.CloneDomains) > 0) {
-		return nil, "", fmt.Errorf("--no-clone, --clone-all, and --clone-domains require --user-data-dir")
-	}
-	if cfg.NoClone && cfg.CloneAll {
-		return nil, "", fmt.Errorf("--no-clone and --clone-all are mutually exclusive")
-	}
-
-	// Determine the user data directory for Chrome.
-	var userDataDir string
-	if cfg.UserDataDir != "" {
-		if cfg.NoClone {
-			// Use the profile directly — user accepted the risk.
-			log.Warnf("--no-clone: using profile directly at %s (Chrome must not be running with this profile)", cfg.UserDataDir)
-			userDataDir = cfg.UserDataDir
-		} else if cfg.CloneAll {
-			// Full recursive clone — slow but complete.
-			log.Warnf("--clone-all: cloning ENTIRE Chrome profile — this includes passwords, history, extensions, and all browser data")
-			clonedDir, err = cloneProfileFull(cfg.UserDataDir)
-			if err != nil {
-				return nil, "", fmt.Errorf("full profile clone: %w", err)
-			}
-			userDataDir = clonedDir
-		} else {
-			// Default: selective clone with domain-scoped cookies.
-			clonedDir, err = cloneProfile(cfg.UserDataDir, cfg.CloneDomains)
-			if err != nil {
-				return nil, "", fmt.Errorf("profile clone: %w", err)
-			}
-			userDataDir = clonedDir
-		}
-	} else {
-		if cfg.BrowserTempDir == "" {
-			cfg.BrowserTempDir = DefaultBrowserTempDir
-		}
-		// browser must own a unique temp dir
-		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(tempDirSuffixLen))
-	}
-
-	browserLauncher := launcher.New().
-		Context(ctx).
-		Headless(cfg.Headless).
-		NoSandbox(cfg.NoSandbox).
-		Set("no-gpu").
-		Set("--no-first-run").
-		Set("ignore-certificate-errors").
-		Set("disable-xss-auditor", "true").
-		Set("disable-popup-blocking").
-		Set("mute-audio", "true").
-		Set("use-mock-keychain").
-		Set("--remote-allow-origins", "*").
-		Set("--disable-dev-shm-usage").
-		Set("--disable-features", "HttpsUpgrades,PasswordLeakDetection").
-		UserDataDir(userDataDir)
-
-	if cfg.BrowserBinPath != "" {
-		browserLauncher.Bin(cfg.BrowserBinPath)
-	} else {
-		if browserPath, has := launcher.LookPath(); has {
-			browserLauncher.Bin(browserPath)
-		} else {
-			return nil, "", errors.New("Chrome not found; set browserBinPath in config or install Chrome/Chromium")
-		}
-	}
-
-	if cfg.ChromeDebugPort != "" {
-		port, err := strconv.Atoi(cfg.ChromeDebugPort)
-		if err != nil || port < 1 || port > 65535 {
-			return nil, "", fmt.Errorf("invalid chrome-debug-port %q: must be 1-65535", cfg.ChromeDebugPort)
-		}
-		browserLauncher.Set("remote-debugging-port", cfg.ChromeDebugPort)
-	}
-
-	if cfg.Proxy != "" {
-		browserLauncher.Proxy(cfg.Proxy)
-	}
-
-	controlUrl, err := browserLauncher.Launch()
-	if err != nil {
-		return nil, "", errors.Wrap(err, "launch local browser failed")
-	}
-	b, err := controlBrowser(ctx, controlUrl)
-	if err != nil {
-		return nil, "", err
-	}
-
-	// Inject decrypted cookies via CDP when using profile cloning (not --no-clone).
-	// The Cookies DB is encrypted by the OS, so we decrypt from the source profile
-	// and inject into the fresh browser via CDP.
-	if cfg.UserDataDir != "" && !cfg.NoClone {
-		cookies, err := ReadChromeCookies(cfg.UserDataDir, cfg.CloneDomains)
-		if err != nil {
-			log.Warnf("cookie injection: %s (browser will start without cookies)", err)
-		} else if len(cookies) > 0 {
-			if err := b.SetCookies(cookies); err != nil {
-				log.Warnf("cookie injection via CDP failed: %s", err)
-			} else {
-				log.Infof("injected %d cookies via CDP", len(cookies))
-			}
-		}
-	}
-
-	return b, clonedDir, nil
-}
-
-func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error) {
-	browser := rod.New().Context(ctx)
-	err := browser.ControlURL(controlURL).Connect()
-	if err != nil {
-		closeErr := browser.Close()
-		if closeErr != nil {
-			return nil, errors.Wrap(closeErr, "close browser after connect failure")
-		}
-		return nil, errors.Wrap(err, "error connecting to browser")
-	}
-	if err := browser.IgnoreCertErrors(true); err != nil {
-		return nil, errors.Wrap(err, "failed to set ignore certificate errors")
-	}
-	return browser, nil
-}
 
 // Mode is the model type, indicates the model type of the tool
 type Mode string
@@ -170,48 +38,6 @@ const (
 	// cleanupRetryDelay is the wait between browser temp dir removal retries.
 	cleanupRetryDelay = 200 * time.Millisecond
 )
-
-// ConsoleMessage represents a captured browser console message.
-type ConsoleMessage struct {
-	Level string `json:"level"`
-	Text  string `json:"text"`
-}
-
-// NetworkRequest represents a captured network request with its response.
-type NetworkRequest struct {
-	RequestID string `json:"requestId"`
-	Method    string `json:"method"`
-	URL       string `json:"url"`
-	Status    int    `json:"status"`
-	Type      string `json:"type"`
-}
-
-// InterceptRule defines a rule for how to handle an intercepted request.
-type InterceptRule struct {
-	URLPattern  string
-	Action      string // "mock", "block", "fail"
-	Status      int
-	Headers     []*proto.FetchHeaderEntry
-	Body        []byte
-	ErrorReason proto.NetworkErrorReason
-}
-
-// WebSocketConnection represents a tracked WebSocket connection.
-type WebSocketConnection struct {
-	RequestID     string `json:"requestId"`
-	URL           string `json:"url"`
-	Closed        bool   `json:"closed"`
-	SentCount     int    `json:"sentCount"`
-	ReceivedCount int    `json:"receivedCount"`
-}
-
-// WebSocketFrame represents a single captured WebSocket message.
-type WebSocketFrame struct {
-	URL         string `json:"url"`
-	Direction   string `json:"direction"` // "sent" or "received"
-	PayloadData string `json:"payloadData"`
-	Opcode      int    `json:"opcode"`
-}
 
 type Context struct {
 	stdContext       context.Context
@@ -254,6 +80,9 @@ func (ctx *Context) EnsurePage() (*rod.Page, error) {
 func (ctx *Context) ControlledPage() (*rod.Page, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
+	if err := ctx.initLocked(); err != nil {
+		return nil, err
+	}
 	if ctx.page == nil {
 		return nil, errors.New("no active tab, call rod_navigate first")
 	}
@@ -264,6 +93,9 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
+	if err := ctx.initLocked(); err != nil {
+		return nil, err
+	}
 	if ctx.browser == nil {
 		return nil, errors.New("no browser running, call rod_navigate first")
 	}
@@ -273,7 +105,12 @@ func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
 func (ctx *Context) initial() error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
+	return ctx.initLocked()
+}
 
+// initLocked performs lazy initialization of the browser and page.
+// Must be called with stateLock held.
+func (ctx *Context) initLocked() error {
 	var err error
 	if ctx.browser == nil {
 		ctx.browser, ctx.clonedProfileDir, err = launchBrowser(ctx.stdContext, ctx.config)
@@ -392,6 +229,7 @@ func (ctx *Context) closePage() error {
 	ctx.page = nil
 	return nil
 }
+
 func (ctx *Context) closeBrowser() error {
 	err := ctx.closePage()
 	if err != nil {
@@ -431,365 +269,6 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	ctx.attachEventListeners(page)
 
 	return page, nil
-}
-
-// attachEventListeners registers goroutine-based listeners for console messages and network requests.
-func (ctx *Context) attachEventListeners(page *rod.Page) {
-	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
-		var parts []string
-		for _, arg := range e.Args {
-			parts = append(parts, arg.Value.String())
-		}
-		text := strings.Join(parts, " ")
-		ctx.stateLock.Lock()
-		ctx.consoleMessages = append(ctx.consoleMessages, ConsoleMessage{
-			Level: string(e.Type),
-			Text:  text,
-		})
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkRequestWillBeSent) {
-		ctx.stateLock.Lock()
-		if ctx.pendingRequests == nil {
-			ctx.pendingRequests = make(map[string]int)
-		}
-		idx := len(ctx.networkRequests)
-		ctx.networkRequests = append(ctx.networkRequests, NetworkRequest{
-			RequestID: string(e.RequestID),
-			Method:    e.Request.Method,
-			URL:       e.Request.URL,
-			Type:      string(e.Type),
-		})
-		ctx.pendingRequests[string(e.RequestID)] = idx
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkResponseReceived) {
-		ctx.stateLock.Lock()
-		if idx, ok := ctx.pendingRequests[string(e.RequestID)]; ok {
-			ctx.networkRequests[idx].Status = e.Response.Status
-			ctx.networkRequests[idx].Type = string(e.Type)
-			delete(ctx.pendingRequests, string(e.RequestID))
-		}
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkWebSocketCreated) {
-		ctx.stateLock.Lock()
-		if ctx.wsConnIndex == nil {
-			ctx.wsConnIndex = make(map[string]int)
-		}
-		ctx.wsConnIndex[string(e.RequestID)] = len(ctx.wsConnections)
-		ctx.wsConnections = append(ctx.wsConnections, WebSocketConnection{
-			RequestID: string(e.RequestID),
-			URL:       e.URL,
-		})
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkWebSocketFrameSent) {
-		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].SentCount++
-			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "sent", e.Response)
-		}
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkWebSocketFrameReceived) {
-		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].ReceivedCount++
-			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "received", e.Response)
-		}
-		ctx.stateLock.Unlock()
-	}, func(e *proto.NetworkWebSocketClosed) {
-		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].Closed = true
-		}
-		ctx.stateLock.Unlock()
-	})()
-}
-
-// ConsoleMessages returns captured console messages, optionally filtered by level.
-// If clear is true, the buffer is emptied after returning.
-func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMessage {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	var result []ConsoleMessage
-	for _, msg := range ctx.consoleMessages {
-		if filterLevel == "" || msg.Level == filterLevel {
-			result = append(result, msg)
-		}
-	}
-
-	if clear {
-		if filterLevel == "" {
-			ctx.consoleMessages = nil
-		} else {
-			// Only clear matching messages
-			var remaining []ConsoleMessage
-			for _, msg := range ctx.consoleMessages {
-				if msg.Level != filterLevel {
-					remaining = append(remaining, msg)
-				}
-			}
-			ctx.consoleMessages = remaining
-		}
-	}
-
-	return result
-}
-
-// NetworkRequests returns captured network requests, optionally filtered by URL pattern and method.
-// If clear is true, the buffer is emptied after returning.
-func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) []NetworkRequest {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	var result []NetworkRequest
-	for _, req := range ctx.networkRequests {
-		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
-			continue
-		}
-		if filterMethod != "" && !strings.EqualFold(req.Method, filterMethod) {
-			continue
-		}
-		result = append(result, req)
-	}
-
-	if clear {
-		ctx.networkRequests = nil
-		ctx.pendingRequests = nil
-	}
-
-	return result
-}
-
-const maxWSFrames = 10000
-
-// appendWSFrame adds a WebSocket frame, dropping the oldest if the buffer is full.
-// Must be called with stateLock held.
-func (ctx *Context) appendWSFrame(url, direction string, frame *proto.NetworkWebSocketFrame) {
-	if len(ctx.wsFrames) >= maxWSFrames {
-		// Drop oldest 10% to avoid frequent shifting
-		drop := maxWSFrames / 10
-		copy(ctx.wsFrames, ctx.wsFrames[drop:])
-		ctx.wsFrames = ctx.wsFrames[:len(ctx.wsFrames)-drop]
-	}
-	ctx.wsFrames = append(ctx.wsFrames, WebSocketFrame{
-		URL:         url,
-		Direction:   direction,
-		PayloadData: frame.PayloadData,
-		Opcode:      int(frame.Opcode),
-	})
-}
-
-// InterceptEnabled returns whether request interception is currently enabled.
-func (ctx *Context) InterceptEnabled() bool {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-	return ctx.interceptEnabled
-}
-
-// SetInterceptEnabled sets whether interception is enabled.
-func (ctx *Context) SetInterceptEnabled(enabled bool) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-	ctx.interceptEnabled = enabled
-	if !enabled {
-		ctx.interceptRules = nil
-	}
-}
-
-// AddInterceptRule appends an interception rule.
-func (ctx *Context) AddInterceptRule(rule InterceptRule) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-	ctx.interceptRules = append(ctx.interceptRules, rule)
-}
-
-// InterceptRules returns a copy of the current interception rules.
-func (ctx *Context) InterceptRules() []InterceptRule {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-	rules := make([]InterceptRule, len(ctx.interceptRules))
-	copy(rules, ctx.interceptRules)
-	return rules
-}
-
-// GetRequestID returns the CDP request ID for a network request at the given index.
-func (ctx *Context) GetRequestID(index int) (string, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	if len(ctx.networkRequests) == 0 {
-		return "", fmt.Errorf("no network requests captured")
-	}
-	if index < 0 || index >= len(ctx.networkRequests) {
-		return "", fmt.Errorf("request index %d out of range (0-%d)", index, len(ctx.networkRequests)-1)
-	}
-	return ctx.networkRequests[index].RequestID, nil
-}
-
-// WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
-func (ctx *Context) WebSocketConnections(urlFilter string) []WebSocketConnection {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	var result []WebSocketConnection
-	for _, conn := range ctx.wsConnections {
-		if urlFilter != "" && !strings.Contains(conn.URL, urlFilter) {
-			continue
-		}
-		result = append(result, conn)
-	}
-	return result
-}
-
-// WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
-func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFrame {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	var result []WebSocketFrame
-	for _, f := range ctx.wsFrames {
-		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
-			continue
-		}
-		if direction != "" && f.Direction != direction {
-			continue
-		}
-		result = append(result, f)
-	}
-	return result
-}
-
-// ClearWebSocketData clears all WebSocket connections and frames.
-func (ctx *Context) ClearWebSocketData() {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-	ctx.wsConnections = nil
-	ctx.wsConnIndex = nil
-	ctx.wsFrames = nil
-}
-
-// TabInfo represents a tab's metadata for listing.
-type TabInfo struct {
-	Index    int    `json:"index"`
-	Title    string `json:"title"`
-	URL      string `json:"url"`
-	IsActive bool   `json:"is_active"`
-}
-
-// NewTab creates a new tab, optionally navigating to a URL, and makes it the active page.
-func (ctx *Context) NewTab(url string) (*rod.Page, error) {
-	if err := ctx.initial(); err != nil {
-		return nil, err
-	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	var page *rod.Page
-	var err error
-	if url != "" {
-		page, err = ctx.createPage(url)
-	} else {
-		page, err = ctx.createPage()
-	}
-	if err != nil {
-		return nil, err
-	}
-	ctx.page = page
-	return page, nil
-}
-
-// ListTabs returns info about all open tabs, marking which is active.
-func (ctx *Context) ListTabs() ([]TabInfo, error) {
-	if err := ctx.initial(); err != nil {
-		return nil, err
-	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	pages, err := ctx.browser.Pages()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to list tabs")
-	}
-
-	tabs := make([]TabInfo, 0, len(pages))
-	for i, p := range pages {
-		info, err := p.Info()
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to get tab info")
-		}
-		tabs = append(tabs, TabInfo{
-			Index:    i,
-			Title:    info.Title,
-			URL:      info.URL,
-			IsActive: ctx.page != nil && p.TargetID == ctx.page.TargetID,
-		})
-	}
-	return tabs, nil
-}
-
-// SelectTab switches the active page to the tab at the given index.
-func (ctx *Context) SelectTab(index int) (*rod.Page, error) {
-	if err := ctx.initial(); err != nil {
-		return nil, err
-	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	pages, err := ctx.browser.Pages()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to list tabs")
-	}
-	if index < 0 || index >= len(pages) {
-		return nil, fmt.Errorf("tab index %d out of range (0-%d)", index, len(pages)-1)
-	}
-	ctx.page = pages[index]
-	return ctx.page, nil
-}
-
-// CloseTab closes the tab at the given index. If it's the active tab,
-// switches to the nearest remaining tab.
-func (ctx *Context) CloseTab(index int) error {
-	if err := ctx.initial(); err != nil {
-		return err
-	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
-
-	pages, err := ctx.browser.Pages()
-	if err != nil {
-		return errors.Wrap(err, "failed to list tabs")
-	}
-	if index < 0 || index >= len(pages) {
-		return fmt.Errorf("tab index %d out of range (0-%d)", index, len(pages)-1)
-	}
-	if len(pages) == 1 {
-		return errors.New("cannot close the last tab")
-	}
-
-	target := pages[index]
-	isActive := ctx.page != nil && target.TargetID == ctx.page.TargetID
-
-	if err := target.Close(); err != nil {
-		return errors.Wrap(err, "failed to close tab")
-	}
-
-	if isActive {
-		// Switch to nearest tab
-		remaining, err := ctx.browser.Pages()
-		if err != nil {
-			return errors.Wrap(err, "failed to list tabs after close")
-		}
-		if len(remaining) > 0 {
-			newIndex := index
-			if newIndex >= len(remaining) {
-				newIndex = len(remaining) - 1
-			}
-			ctx.page = remaining[newIndex]
-		} else {
-			ctx.page = nil
-		}
-	}
-
-	return nil
 }
 
 // UpdateHeadersForURL updates the extra HTTP headers on the current page based on the target URL.
