@@ -194,11 +194,17 @@ var (
 				promptText = t
 			}
 
-			// Handle the dialog synchronously inside the CDP event callback.
-			// Chrome headless auto-dismisses dialogs if PageHandleJavaScriptDialog
-			// is not sent immediately when the event fires. Using EachEvent ensures
-			// we handle the dialog within the same event dispatch, eliminating the
-			// race between wait() returning and handle() being called.
+			// Enable the Page domain so Chrome pauses on dialogs instead of
+			// auto-dismissing them. This is what rod's HandleDialog() does
+			// internally via EnableDomain.
+			enableCmd := proto.PageEnable{}
+			if enableErr := enableCmd.Call(page); enableErr != nil {
+				return toolErr("handle dialog", enableErr)
+			}
+
+			// Use EachEvent to handle the dialog synchronously inside the CDP
+			// event callback, eliminating the scheduling gap between
+			// wait() returning and handle() being called.
 			type dialogResult struct {
 				evt *proto.PageJavascriptDialogOpening
 				err error
@@ -206,8 +212,6 @@ var (
 			ch := make(chan dialogResult, 1)
 
 			go page.EachEvent(func(e *proto.PageJavascriptDialogOpening) bool {
-				// Handle the dialog immediately within the event callback to
-				// prevent Chrome headless from auto-dismissing it.
 				handleErr := proto.PageHandleJavaScriptDialog{
 					Accept:     accept,
 					PromptText: promptText,

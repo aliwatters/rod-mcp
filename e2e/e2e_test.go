@@ -724,7 +724,10 @@ func TestE2E(t *testing.T) {
 		})
 		assertContains(t, result, "Click element")
 
-		// Verify the button was clicked by checking a new element appeared.
+		// Wait for the DOM to update after click, then verify.
+		h.call("rod_evaluate", map[string]any{
+			"script": `() => new Promise(r => { const check = () => document.querySelector('.added-manually') ? r('ok') : setTimeout(check, 50); check(); })`,
+		})
 		result = h.call("rod_snapshot", nil)
 		assertContains(t, result, "Delete")
 	})
