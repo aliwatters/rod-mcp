@@ -2,10 +2,9 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
-
-	"errors"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"

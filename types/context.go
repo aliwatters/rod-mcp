@@ -2,13 +2,12 @@ package types
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
 	"sync"
 	"time"
-
-	"errors"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
