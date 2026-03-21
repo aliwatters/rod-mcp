@@ -194,36 +194,28 @@ var (
 				promptText = t
 			}
 
-			// Enable the Page domain so Chrome pauses on dialogs instead of
-			// auto-dismissing them. This is what rod's HandleDialog() does
-			// internally via EnableDomain.
-			enableCmd := proto.PageEnable{}
-			if enableErr := enableCmd.Call(page); enableErr != nil {
-				return toolErr("handle dialog", enableErr)
-			}
+			// Use rod's HandleDialog which registers a Page.javascriptDialogOpening
+			// listener. This blocks until a dialog appears, then handles it.
+			wait, handle := page.HandleDialog()
 
-			// Use EachEvent to handle the dialog synchronously inside the CDP
-			// event callback, eliminating the scheduling gap between
-			// wait() returning and handle() being called.
+			// Wait for the dialog in a goroutine with a timeout.
 			type dialogResult struct {
 				evt *proto.PageJavascriptDialogOpening
-				err error
 			}
 			ch := make(chan dialogResult, 1)
-
-			go page.EachEvent(func(e *proto.PageJavascriptDialogOpening) bool {
-				handleErr := proto.PageHandleJavaScriptDialog{
-					Accept:     accept,
-					PromptText: promptText,
-				}.Call(page)
-				ch <- dialogResult{evt: e, err: handleErr}
-				return true // stop listening after first dialog
-			})()
+			go func() {
+				evt := wait()
+				ch <- dialogResult{evt: evt}
+			}()
 
 			select {
 			case dr := <-ch:
-				if dr.err != nil {
-					return toolErr("handle dialog", dr.err)
+				err = handle(&proto.PageHandleJavaScriptDialog{
+					Accept:     accept,
+					PromptText: promptText,
+				})
+				if err != nil {
+					return toolErr("handle dialog", err)
 				}
 				msg := fmt.Sprintf("Dialog %sed successfully (type: %s, message: %q)",
 					action, dr.evt.Type, dr.evt.Message)
