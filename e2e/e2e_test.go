@@ -689,6 +689,12 @@ func TestE2E(t *testing.T) {
 			"arguments": map[string]any{"action": "accept"},
 		})
 
+		// Give the server time to register the dialog listener before triggering
+		// the dialog. Without this delay, rod_evaluate can run first and open the
+		// dialog before HandleDialog() has registered its CDP event listener,
+		// causing "No dialog is showing" errors (flaky on CI).
+		time.Sleep(500 * time.Millisecond)
+
 		// Trigger the alert (this will also block until dialog is dismissed).
 		clickID := h.send("tools/call", map[string]any{
 			"name":      "rod_evaluate",
