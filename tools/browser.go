@@ -194,28 +194,32 @@ var (
 				promptText = t
 			}
 
-			// Use rod's HandleDialog which registers a Page.javascriptDialogOpening
-			// listener. This blocks until a dialog appears, then handles it.
-			wait, handle := page.HandleDialog()
-
-			// Wait for the dialog in a goroutine with a timeout.
+			// Handle the dialog synchronously inside the CDP event callback.
+			// Chrome headless auto-dismisses dialogs if PageHandleJavaScriptDialog
+			// is not sent immediately when the event fires. Using EachEvent ensures
+			// we handle the dialog within the same event dispatch, eliminating the
+			// race between wait() returning and handle() being called.
 			type dialogResult struct {
 				evt *proto.PageJavascriptDialogOpening
+				err error
 			}
 			ch := make(chan dialogResult, 1)
-			go func() {
-				evt := wait()
-				ch <- dialogResult{evt: evt}
-			}()
+
+			go page.EachEvent(func(e *proto.PageJavascriptDialogOpening) bool {
+				// Handle the dialog immediately within the event callback to
+				// prevent Chrome headless from auto-dismissing it.
+				handleErr := proto.PageHandleJavaScriptDialog{
+					Accept:     accept,
+					PromptText: promptText,
+				}.Call(page)
+				ch <- dialogResult{evt: e, err: handleErr}
+				return true // stop listening after first dialog
+			})()
 
 			select {
 			case dr := <-ch:
-				err = handle(&proto.PageHandleJavaScriptDialog{
-					Accept:     accept,
-					PromptText: promptText,
-				})
-				if err != nil {
-					return toolErr("handle dialog", err)
+				if dr.err != nil {
+					return toolErr("handle dialog", dr.err)
 				}
 				msg := fmt.Sprintf("Dialog %sed successfully (type: %s, message: %q)",
 					action, dr.evt.Type, dr.evt.Message)
