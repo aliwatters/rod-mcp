@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -170,13 +171,21 @@ var (
 			case "stop":
 				var stopped []string
 				if doJS {
-					_ = proto.ProfilerStopPreciseCoverage{}.Call(page)
-					_ = proto.ProfilerDisable{}.Call(page)
+					if err := (proto.ProfilerStopPreciseCoverage{}).Call(page); err != nil {
+						log.Warnf("stop profiler coverage: %s", err)
+					}
+					if err := (proto.ProfilerDisable{}).Call(page); err != nil {
+						log.Warnf("disable profiler: %s", err)
+					}
 					stopped = append(stopped, "JS")
 				}
 				if doCSS {
-					_, _ = proto.CSSStopRuleUsageTracking{}.Call(page)
-					_ = proto.CSSDisable{}.Call(page)
+					if _, err := (proto.CSSStopRuleUsageTracking{}).Call(page); err != nil {
+						log.Warnf("stop CSS rule tracking: %s", err)
+					}
+					if err := (proto.CSSDisable{}).Call(page); err != nil {
+						log.Warnf("disable CSS domain: %s", err)
+					}
 					stopped = append(stopped, "CSS")
 				}
 				return mcp.NewToolResultText(fmt.Sprintf("Coverage collection stopped: %s", strings.Join(stopped, ", "))), nil
