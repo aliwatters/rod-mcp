@@ -22,18 +22,18 @@ func (r *RingBuffer[T]) Add(item T) {
 // The returned index is stable for the lifetime of the item (until it is overwritten
 // by a future Add when the buffer is full). Use UpdateAt to modify the item later.
 func (r *RingBuffer[T]) AddWithIndex(item T) int {
-	cap := len(r.items)
+	capacity := len(r.items)
 	var idx int
-	if r.count < cap {
+	if r.count < capacity {
 		// Buffer not yet full — write at tail position.
-		idx = (r.head + r.count) % cap
+		idx = (r.head + r.count) % capacity
 		r.items[idx] = item
 		r.count++
 	} else {
 		// Buffer full — overwrite oldest entry and advance head.
 		idx = r.head
 		r.items[idx] = item
-		r.head = (r.head + 1) % cap
+		r.head = (r.head + 1) % capacity
 	}
 	return idx
 }
@@ -54,10 +54,10 @@ func (r *RingBuffer[T]) Slice() []T {
 	if r.count == 0 {
 		return nil
 	}
-	cap := len(r.items)
+	capacity := len(r.items)
 	out := make([]T, r.count)
 	for i := range r.count {
-		out[i] = r.items[(r.head+i)%cap]
+		out[i] = r.items[(r.head+i)%capacity]
 	}
 	return out
 }
