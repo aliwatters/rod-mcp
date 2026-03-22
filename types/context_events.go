@@ -64,12 +64,7 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 		}
 		text := strings.Join(parts, " ")
 		ctx.stateLock.Lock()
-		if len(ctx.consoleMessages) >= maxConsoleMessages {
-			drop := maxConsoleMessages / 10
-			copy(ctx.consoleMessages, ctx.consoleMessages[drop:])
-			ctx.consoleMessages = ctx.consoleMessages[:len(ctx.consoleMessages)-drop]
-		}
-		ctx.consoleMessages = append(ctx.consoleMessages, ConsoleMessage{
+		ctx.consoleMessages.Add(ConsoleMessage{
 			Level: string(e.Type),
 			Text:  text,
 		})
@@ -79,21 +74,9 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 		if ctx.pendingRequests == nil {
 			ctx.pendingRequests = make(map[string]int)
 		}
-		if len(ctx.networkRequests) >= maxNetworkRequests {
-			drop := maxNetworkRequests / 10
-			// Shift pendingRequests indices down.
-			for k, v := range ctx.pendingRequests {
-				if v < drop {
-					delete(ctx.pendingRequests, k)
-				} else {
-					ctx.pendingRequests[k] = v - drop
-				}
-			}
-			copy(ctx.networkRequests, ctx.networkRequests[drop:])
-			ctx.networkRequests = ctx.networkRequests[:len(ctx.networkRequests)-drop]
-		}
-		idx := len(ctx.networkRequests)
-		ctx.networkRequests = append(ctx.networkRequests, NetworkRequest{
+		// AddWithIndex returns the internal ring-buffer slot index, which is
+		// stable until the slot is evicted by a future overflow.
+		idx := ctx.networkRequests.AddWithIndex(NetworkRequest{
 			RequestID: string(e.RequestID),
 			Method:    e.Request.Method,
 			URL:       e.Request.URL,
@@ -104,8 +87,12 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 	}, func(e *proto.NetworkResponseReceived) {
 		ctx.stateLock.Lock()
 		if idx, ok := ctx.pendingRequests[string(e.RequestID)]; ok {
-			ctx.networkRequests[idx].Status = e.Response.Status
-			ctx.networkRequests[idx].Type = string(e.Type)
+			status := e.Response.Status
+			typ := string(e.Type)
+			ctx.networkRequests.UpdateAt(idx, func(req *NetworkRequest) {
+				req.Status = status
+				req.Type = typ
+			})
 			delete(ctx.pendingRequests, string(e.RequestID))
 		}
 		ctx.stateLock.Unlock()
@@ -151,8 +138,9 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
+	all := ctx.consoleMessages.Slice()
 	var result []ConsoleMessage
-	for _, msg := range ctx.consoleMessages {
+	for _, msg := range all {
 		if filterLevel == "" || msg.Level == filterLevel {
 			result = append(result, msg)
 		}
@@ -160,16 +148,16 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 
 	if clear {
 		if filterLevel == "" {
-			ctx.consoleMessages = nil
+			ctx.consoleMessages.Clear()
 		} else {
-			// Only clear matching messages
-			var remaining []ConsoleMessage
-			for _, msg := range ctx.consoleMessages {
+			// Rebuild the buffer keeping only non-matching messages.
+			fresh := NewRingBuffer[ConsoleMessage](maxConsoleMessages)
+			for _, msg := range all {
 				if msg.Level != filterLevel {
-					remaining = append(remaining, msg)
+					fresh.Add(msg)
 				}
 			}
-			ctx.consoleMessages = remaining
+			ctx.consoleMessages = fresh
 		}
 	}
 
@@ -183,7 +171,7 @@ func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) 
 	defer ctx.stateLock.Unlock()
 
 	var result []NetworkRequest
-	for _, req := range ctx.networkRequests {
+	for _, req := range ctx.networkRequests.Slice() {
 		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
 			continue
 		}
@@ -194,23 +182,17 @@ func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) 
 	}
 
 	if clear {
-		ctx.networkRequests = nil
+		ctx.networkRequests.Clear()
 		ctx.pendingRequests = nil
 	}
 
 	return result
 }
 
-// appendWSFrame adds a WebSocket frame, dropping the oldest if the buffer is full.
+// appendWSFrame adds a WebSocket frame to the ring buffer (O(1), no copying).
 // Must be called with stateLock held.
 func (ctx *Context) appendWSFrame(url, direction string, frame *proto.NetworkWebSocketFrame) {
-	if len(ctx.wsFrames) >= maxWSFrames {
-		// Drop oldest 10% to avoid frequent shifting
-		drop := maxWSFrames / 10
-		copy(ctx.wsFrames, ctx.wsFrames[drop:])
-		ctx.wsFrames = ctx.wsFrames[:len(ctx.wsFrames)-drop]
-	}
-	ctx.wsFrames = append(ctx.wsFrames, WebSocketFrame{
+	ctx.wsFrames.Add(WebSocketFrame{
 		URL:         url,
 		Direction:   direction,
 		PayloadData: frame.PayloadData,
@@ -223,13 +205,14 @@ func (ctx *Context) GetRequestID(index int) (string, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
-	if len(ctx.networkRequests) == 0 {
+	all := ctx.networkRequests.Slice()
+	if len(all) == 0 {
 		return "", fmt.Errorf("no network requests captured")
 	}
-	if index < 0 || index >= len(ctx.networkRequests) {
-		return "", fmt.Errorf("request index %d out of range (0-%d)", index, len(ctx.networkRequests)-1)
+	if index < 0 || index >= len(all) {
+		return "", fmt.Errorf("request index %d out of range (0-%d)", index, len(all)-1)
 	}
-	return ctx.networkRequests[index].RequestID, nil
+	return all[index].RequestID, nil
 }
 
 // WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
@@ -253,7 +236,7 @@ func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFram
 	defer ctx.stateLock.Unlock()
 
 	var result []WebSocketFrame
-	for _, f := range ctx.wsFrames {
+	for _, f := range ctx.wsFrames.Slice() {
 		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
 			continue
 		}
@@ -271,5 +254,5 @@ func (ctx *Context) ClearWebSocketData() {
 	defer ctx.stateLock.Unlock()
 	ctx.wsConnections = nil
 	ctx.wsConnIndex = nil
-	ctx.wsFrames = nil
+	ctx.wsFrames.Clear()
 }

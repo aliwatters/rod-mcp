@@ -51,9 +51,11 @@ type Context struct {
 	stateLock       sync.Mutex
 	snapshot        *Snapshot
 	mode            Mode
-	consoleMessages []ConsoleMessage
-	networkRequests []NetworkRequest
+	consoleMessages *RingBuffer[ConsoleMessage]
+	networkRequests *RingBuffer[NetworkRequest]
 	// pendingRequests tracks in-flight requests by ID for response correlation.
+	// Values are indices into the networkRequests ring buffer's internal items slice;
+	// they remain valid because the ring buffer never shifts elements.
 	pendingRequests map[string]int
 	// Intercept state
 	interceptRules   []InterceptRule
@@ -63,16 +65,19 @@ type Context struct {
 	// WebSocket tracking
 	wsConnections []WebSocketConnection
 	wsConnIndex   map[string]int // requestID → index in wsConnections
-	wsFrames      []WebSocketFrame
+	wsFrames      *RingBuffer[WebSocketFrame]
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
 }
 
 func NewContext(ctx context.Context, cfg Config) *Context {
 	return &Context{
-		stdContext: ctx,
-		config:     cfg,
-		mode:       cfg.Mode,
+		stdContext:      ctx,
+		config:          cfg,
+		mode:            cfg.Mode,
+		consoleMessages: NewRingBuffer[ConsoleMessage](maxConsoleMessages),
+		networkRequests: NewRingBuffer[NetworkRequest](maxNetworkRequests),
+		wsFrames:        NewRingBuffer[WebSocketFrame](maxWSFrames),
 	}
 }
 
