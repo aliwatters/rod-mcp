@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/types/js"
 )
 
 const A11yAuditToolKey = "rod_a11y_audit"
@@ -58,60 +60,75 @@ var A11yAuditHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		if err != nil {
 			return toolErr("a11y audit: get accessibility tree", err)
 		}
+		axIssues, stats := analyzeAXTree(tree.Nodes)
 
-		// Also get DOM info for elements missing a11y names via JavaScript.
-		jsAudit := buildJSAuditScript(selector)
-		domResult, err := page.Eval(jsAudit)
+		// Run the JS-based DOM audit for issues not visible in the AX tree.
+		jsIssues, err := runJSAudit(page, selector)
 		if err != nil {
 			return toolErr("a11y audit: DOM scan", err)
 		}
 
-		var domIssues []a11yIssue
-		if err := json.Unmarshal([]byte(domResult.Value.String()), &domIssues); err != nil {
-			return toolErr("a11y audit: parse DOM results", err)
-		}
-
-		// Analyze the CDP accessibility tree for additional issues.
-		axIssues, axStats := analyzeAXTree(tree.Nodes)
-
-		// Merge issues (DOM-based + AX tree-based), dedup by rule+selector.
-		allIssues := deduplicateIssues(append(domIssues, axIssues...))
-
-		var errors, warnings int
-		for _, issue := range allIssues {
-			switch issue.Severity {
-			case "error":
-				errors++
-			case "warning":
-				warnings++
-			}
-		}
-
-		coverage := "100%"
-		if axStats.total > 0 {
-			pct := float64(axStats.named) / float64(axStats.total) * 100
-			coverage = fmt.Sprintf("%.1f%%", pct)
-		}
-
-		report := a11yReport{
-			Issues: allIssues,
-			Summary: a11ySummary{
-				Errors:          errors,
-				Warnings:        warnings,
-				ElementsScanned: axStats.total,
-				ElementsNamed:   axStats.named,
-				Coverage:        coverage,
-			},
-		}
-
-		reportJSON, err := json.MarshalIndent(report, "", "  ")
+		reportJSON, err := mergeAndFormatReport(axIssues, jsIssues, stats)
 		if err != nil {
 			return toolErr("a11y audit: marshal report", err)
 		}
 
-		return mcp.NewToolResultText(string(reportJSON)), nil
+		return mcp.NewToolResultText(reportJSON), nil
 	}
 	return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+}
+
+// runJSAudit executes the embedded JS audit on the page for the given selector
+// and returns the parsed list of a11y issues.
+func runJSAudit(page *rod.Page, selector string) ([]a11yIssue, error) {
+	domResult, err := page.Eval(buildJSAuditScript(selector))
+	if err != nil {
+		return nil, err
+	}
+	var issues []a11yIssue
+	if err := json.Unmarshal([]byte(domResult.Value.String()), &issues); err != nil {
+		return nil, err
+	}
+	return issues, nil
+}
+
+// mergeAndFormatReport merges AX-tree issues and JS-DOM issues, deduplicates
+// them, tallies severities, and returns the formatted JSON report string.
+func mergeAndFormatReport(axIssues, jsIssues []a11yIssue, stats axStats) (string, error) {
+	allIssues := deduplicateIssues(append(jsIssues, axIssues...))
+
+	var errors, warnings int
+	for _, issue := range allIssues {
+		switch issue.Severity {
+		case "error":
+			errors++
+		case "warning":
+			warnings++
+		}
+	}
+
+	coverage := "100%"
+	if stats.total > 0 {
+		pct := float64(stats.named) / float64(stats.total) * 100
+		coverage = fmt.Sprintf("%.1f%%", pct)
+	}
+
+	report := a11yReport{
+		Issues: allIssues,
+		Summary: a11ySummary{
+			Errors:          errors,
+			Warnings:        warnings,
+			ElementsScanned: stats.total,
+			ElementsNamed:   stats.named,
+			Coverage:        coverage,
+		},
+	}
+
+	out, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 type axStats struct {
@@ -188,129 +205,14 @@ func headingLevel(node *proto.AccessibilityAXNode) int {
 }
 
 // buildJSAuditScript returns JavaScript that audits the DOM for a11y issues.
+// It is a thin wrapper that interpolates the root element expression into the
+// embedded a11y_audit.js template (placeholder: %ROOT_EXPR%).
 func buildJSAuditScript(selector string) string {
 	root := "document.body"
 	if selector != "" {
 		root = fmt.Sprintf("document.querySelector(%q) || document.body", selector)
 	}
-
-	return fmt.Sprintf(`function() {
-		const root = %s;
-		const issues = [];
-
-		// Rule: img-alt — images without alt text
-		root.querySelectorAll('img').forEach(img => {
-			if (!img.hasAttribute('alt')) {
-				issues.push({
-					severity: 'error',
-					rule: 'img-alt',
-					element: img.outerHTML.substring(0, 120),
-					selector: cssPath(img),
-					message: 'Image missing alt text'
-				});
-			}
-		});
-
-		// Rule: button-name — buttons without accessible names
-		root.querySelectorAll('button, [role="button"]').forEach(btn => {
-			const name = btn.textContent.trim() ||
-				btn.getAttribute('aria-label') ||
-				btn.getAttribute('aria-labelledby') ||
-				btn.getAttribute('title');
-			if (!name) {
-				issues.push({
-					severity: 'error',
-					rule: 'button-name',
-					element: btn.outerHTML.substring(0, 120),
-					selector: cssPath(btn),
-					message: 'Button has no accessible name (no text, aria-label, or aria-labelledby)'
-				});
-			}
-		});
-
-		// Rule: input-label — form inputs without labels
-		root.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]):not([type="reset"]), select, textarea').forEach(input => {
-			const id = input.id;
-			const hasLabel = (id && root.querySelector('label[for="' + id + '"]')) ||
-				input.closest('label') ||
-				input.getAttribute('aria-label') ||
-				input.getAttribute('aria-labelledby') ||
-				input.getAttribute('title');
-			if (!hasLabel) {
-				issues.push({
-					severity: 'error',
-					rule: 'input-label',
-					element: input.outerHTML.substring(0, 120),
-					selector: cssPath(input),
-					message: 'Form input missing associated label, aria-label, aria-labelledby, or title'
-				});
-			}
-		});
-
-		// Rule: link-name — links without accessible names
-		root.querySelectorAll('a[href]').forEach(link => {
-			const name = link.textContent.trim() ||
-				link.getAttribute('aria-label') ||
-				link.getAttribute('aria-labelledby') ||
-				link.getAttribute('title');
-			if (!name) {
-				// Check if link contains an image with alt
-				const img = link.querySelector('img[alt]');
-				if (!img || !img.alt.trim()) {
-					issues.push({
-						severity: 'error',
-						rule: 'link-name',
-						element: link.outerHTML.substring(0, 120),
-						selector: cssPath(link),
-						message: 'Link has no accessible name'
-					});
-				}
-			}
-		});
-
-		// Rule: landmark-unique — duplicate landmark roles without unique labels
-		const landmarks = {};
-		root.querySelectorAll('[role="banner"], [role="navigation"], [role="main"], [role="contentinfo"], [role="complementary"], [role="search"], nav, main, header, footer, aside').forEach(el => {
-			const role = el.getAttribute('role') || el.tagName.toLowerCase();
-			const label = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || '';
-			const key = role + ':' + label;
-			if (!landmarks[key]) {
-				landmarks[key] = [];
-			}
-			landmarks[key].push(el);
-		});
-		for (const [key, elements] of Object.entries(landmarks)) {
-			if (elements.length > 1) {
-				const [role, label] = key.split(':');
-				if (!label) {
-					issues.push({
-						severity: 'warning',
-						rule: 'landmark-unique',
-						message: elements.length + ' ' + role + ' landmarks without unique aria-label to distinguish them',
-					});
-				}
-			}
-		}
-
-		function cssPath(el) {
-			const parts = [];
-			while (el && el.nodeType === 1) {
-				let part = el.tagName.toLowerCase();
-				if (el.id) {
-					part += '#' + el.id;
-					parts.unshift(part);
-					break;
-				}
-				const cls = Array.from(el.classList).filter(c => !c.includes(':')).slice(0, 2).join('.');
-				if (cls) part += '.' + cls;
-				parts.unshift(part);
-				el = el.parentElement;
-			}
-			return parts.join(' > ');
-		}
-
-		return JSON.stringify(issues);
-	}`, root)
+	return strings.ReplaceAll(js.A11yAuditJS, "%ROOT_EXPR%", root)
 }
 
 // deduplicateIssues removes duplicate issues. Uses selector as the primary
