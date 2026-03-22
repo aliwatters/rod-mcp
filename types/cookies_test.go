@@ -200,18 +200,10 @@ func TestDecryptCookieValue_NotMultipleOfBlockSize(t *testing.T) {
 	}
 }
 
-func TestDecryptCookieValue_ValidRoundTrip(t *testing.T) {
-	// Build a valid encrypted cookie value and verify we can decrypt it.
-	password := "testpassword"
-	key, err := deriveChromeKey(password)
-	if err != nil {
-		t.Fatalf("deriveChromeKey: %v", err)
-	}
-
-	// Encrypt a known plaintext using the same scheme Chrome uses.
-	plaintext := []byte("hello-cookie-value")
-
-	// Apply PKCS#7 padding to a full AES block.
+// encryptCBCForTest encrypts plaintext using AES-128-CBC with a zero IV and PKCS#7
+// padding, matching Chrome's cookie encryption scheme. Prefixes the result with version.
+func encryptCBCForTest(t *testing.T, key, plaintext []byte, version string) []byte {
+	t.Helper()
 	blockSize := aes.BlockSize
 	padLen := blockSize - (len(plaintext) % blockSize)
 	padded := append(plaintext, make([]byte, padLen)...)
@@ -219,28 +211,32 @@ func TestDecryptCookieValue_ValidRoundTrip(t *testing.T) {
 		padded[i] = byte(padLen)
 	}
 
-	// Encrypt with AES-128-CBC, IV = 16 zero bytes.
-	import_block, err2 := aes.NewCipher(key)
-	if err2 != nil {
-		t.Fatalf("NewCipher: %v", err2)
+	cipherBlock, err := aes.NewCipher(key)
+	if err != nil {
+		t.Fatalf("NewCipher: %v", err)
 	}
 	iv := make([]byte, blockSize)
 	encrypted := make([]byte, len(padded))
-
-	// Manual CBC encryption block by block.
 	prev := iv
 	for i := 0; i < len(padded); i += blockSize {
-		block := padded[i : i+blockSize]
 		xored := make([]byte, blockSize)
 		for j := 0; j < blockSize; j++ {
-			xored[j] = block[j] ^ prev[j]
+			xored[j] = padded[i+j] ^ prev[j]
 		}
-		import_block.Encrypt(encrypted[i:i+blockSize], xored)
+		cipherBlock.Encrypt(encrypted[i:i+blockSize], xored)
 		prev = encrypted[i : i+blockSize]
 	}
+	return append([]byte(version), encrypted...)
+}
 
-	// Prefix with "v10".
-	payload := append([]byte("v10"), encrypted...)
+func TestDecryptCookieValue_ValidRoundTrip(t *testing.T) {
+	key, err := deriveChromeKey("testpassword")
+	if err != nil {
+		t.Fatalf("deriveChromeKey: %v", err)
+	}
+
+	plaintext := []byte("hello-cookie-value")
+	payload := encryptCBCForTest(t, key, plaintext, "v10")
 
 	got, err := decryptCookieValue(payload, key)
 	if err != nil {
@@ -252,35 +248,14 @@ func TestDecryptCookieValue_ValidRoundTrip(t *testing.T) {
 }
 
 func TestDecryptCookieValue_V11Prefix(t *testing.T) {
-	// v11 prefix should also be accepted (newer Chrome versions).
-	password := "testpassword"
-	key, err := deriveChromeKey(password)
+	key, err := deriveChromeKey("testpassword")
 	if err != nil {
 		t.Fatalf("deriveChromeKey: %v", err)
 	}
 
 	plaintext := []byte("v11cookie")
-	blockSize := aes.BlockSize
-	padLen := blockSize - (len(plaintext) % blockSize)
-	padded := append(plaintext, make([]byte, padLen)...)
-	for i := len(plaintext); i < len(padded); i++ {
-		padded[i] = byte(padLen)
-	}
+	payload := encryptCBCForTest(t, key, plaintext, "v11")
 
-	block, _ := aes.NewCipher(key)
-	iv := make([]byte, blockSize)
-	encrypted := make([]byte, len(padded))
-	prev := iv
-	for i := 0; i < len(padded); i += blockSize {
-		xored := make([]byte, blockSize)
-		for j := 0; j < blockSize; j++ {
-			xored[j] = padded[i+j] ^ prev[j]
-		}
-		block.Encrypt(encrypted[i:i+blockSize], xored)
-		prev = encrypted[i : i+blockSize]
-	}
-
-	payload := append([]byte("v11"), encrypted...)
 	got, err := decryptCookieValue(payload, key)
 	if err != nil {
 		t.Fatalf("decryptCookieValue v11: unexpected error: %v", err)
