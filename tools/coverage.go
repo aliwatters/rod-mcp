@@ -92,6 +92,18 @@ func coverageStart(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, error
 	return mcp.NewToolResultText(fmt.Sprintf("Coverage collection started: %s", strings.Join(started, ", "))), nil
 }
 
+// formatCoverageEntry formats a single coverage entry as a markdown list item.
+func formatCoverageEntry(label string, used, total int) string {
+	pct := float64(used) / float64(total) * 100
+	return fmt.Sprintf("- %s: %.1f%% (%d/%d bytes)\n", label, pct, used, total)
+}
+
+// formatCoverageTotal formats the grand total line for a coverage section.
+func formatCoverageTotal(prefix string, used, total int) string {
+	pct := float64(used) / float64(total) * 100
+	return fmt.Sprintf("\n%s Total: %.1f%% (%d/%d bytes)\n", prefix, pct, used, total)
+}
+
 func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, error) {
 	var result strings.Builder
 
@@ -109,8 +121,7 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 				if script.URL == "" {
 					continue
 				}
-				scriptTotal := 0
-				scriptUsed := 0
+				scriptTotal, scriptUsed := 0, 0
 				for _, fn := range script.Functions {
 					for _, r := range fn.Ranges {
 						size := r.EndOffset - r.StartOffset
@@ -121,15 +132,14 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 					}
 				}
 				if scriptTotal > 0 {
-					pct := float64(scriptUsed) / float64(scriptTotal) * 100
-					result.WriteString(fmt.Sprintf("- %s: %.1f%% (%d/%d bytes)\n", script.URL, pct, scriptUsed, scriptTotal))
+					result.WriteString(formatCoverageEntry(script.URL, scriptUsed, scriptTotal))
 					totalBytes += scriptTotal
 					usedBytes += scriptUsed
 				}
 			}
 			if totalBytes > 0 {
-				pct := float64(usedBytes) / float64(totalBytes) * 100
-				result.WriteString(fmt.Sprintf("\nJS Total: %.1f%% (%d/%d bytes)\n\n", pct, usedBytes, totalBytes))
+				result.WriteString(formatCoverageTotal("JS", usedBytes, totalBytes))
+				result.WriteString("\n")
 			}
 		}
 	}
@@ -164,15 +174,13 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 			var totalBytes, usedBytes int
 			for id, s := range sheets {
 				if s.total > 0 {
-					pct := float64(s.used) / float64(s.total) * 100
-					result.WriteString(fmt.Sprintf("- stylesheet %s: %.1f%% (%d/%d bytes)\n", id, pct, s.used, s.total))
+					result.WriteString(formatCoverageEntry("stylesheet "+id, s.used, s.total))
 					totalBytes += s.total
 					usedBytes += s.used
 				}
 			}
 			if totalBytes > 0 {
-				pct := float64(usedBytes) / float64(totalBytes) * 100
-				result.WriteString(fmt.Sprintf("\nCSS Total: %.1f%% (%d/%d bytes)\n", pct, usedBytes, totalBytes))
+				result.WriteString(formatCoverageTotal("CSS", usedBytes, totalBytes))
 			}
 		}
 	}
