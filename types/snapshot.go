@@ -3,13 +3,15 @@ package types
 import (
 	"errors"
 	"fmt"
-	"github.com/go-rod/rod"
-	"github.com/aliwatters/rod-mcp/types/js"
-	"github.com/aliwatters/rod-mcp/utils"
-	"gopkg.in/yaml.v3"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/go-rod/rod"
+	"gopkg.in/yaml.v3"
+
+	"github.com/aliwatters/rod-mcp/types/js"
+	"github.com/aliwatters/rod-mcp/utils"
 )
 
 const (
@@ -25,6 +27,13 @@ const (
 	truncationEllipsis = "... "
 	// truncationSuffixPad is the character budget reserved for the ellipsis when preserving ref suffixes.
 	truncationSuffixPad = len(truncationEllipsis)
+)
+
+var (
+	// refPattern matches [ref=...] suffixes in ARIA snapshot scalars.
+	refPattern = regexp.MustCompile(`\[ref=(.*?)\]`)
+	// iframeRefPattern matches iframe ref prefixes like "f1e42".
+	iframeRefPattern = regexp.MustCompile(`^f(\d+)(.*)`)
 )
 
 const snapshotTpl = `
@@ -175,8 +184,7 @@ func (s *Snapshot) walkScalarNode(node *yaml.Node, frameIndex int, frame *rod.Pa
 // walkIframeNode captures an iframe's snapshot and returns a mapping node with the result.
 // Returns nil if the node doesn't have a ref or isn't an iframe.
 func (s *Snapshot) walkIframeNode(node *yaml.Node, frame *rod.Page) *yaml.Node {
-	re := regexp.MustCompile(`\[ref=(.*?)\]`)
-	matches := re.FindStringSubmatch(node.Value)
+	matches := refPattern.FindStringSubmatch(node.Value)
 	if len(matches) <= 1 {
 		return nil
 	}
@@ -484,7 +492,7 @@ func (s *Snapshot) LocatorInFrame(ref string) (*rod.Element, error) {
 		return nil, errors.New("no frames available in snapshot")
 	}
 	frame := s.frames[0]
-	matches := regexp.MustCompile(`^f(\d+)(.*)`).FindStringSubmatch(ref)
+	matches := iframeRefPattern.FindStringSubmatch(ref)
 	if len(matches) > 0 {
 		frameIndex, err := strconv.Atoi(matches[1])
 		if err != nil {
