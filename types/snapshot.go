@@ -55,6 +55,9 @@ type Snapshot struct {
 	frames       []*rod.Page
 	textSnapshot string
 	refIndex     []RefEntry
+	// refAccum is used during walk() to accumulate ref entries in a single pass.
+	// It is set to nil after walk() completes and the entries are moved to refIndex.
+	refAccum *[]RefEntry
 }
 
 func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
@@ -66,8 +69,8 @@ func BuildSnapshot(p *rod.Page, compact bool) (*Snapshot, error) {
 		return nil, err
 	}
 
-	// Build the ref index before compaction (which may truncate names).
-	snapshot.refIndex = buildRefIndex(yamlDoc)
+	// refIndex is populated during walk() via walkScalarNode accumulator.
+	// No separate buildRefIndex pass is needed.
 
 	if compact {
 		yamlDoc = compactSnapshot(yamlDoc)
@@ -102,6 +105,13 @@ func (s *Snapshot) String() string {
 }
 
 func (s *Snapshot) captureSnapshotWithFrames(p *rod.Page) (*yaml.Node, error) {
+	// Initialize the ref accumulator on the first (top-level) call.
+	isRoot := s.refAccum == nil
+	if isRoot {
+		entries := make([]RefEntry, 0)
+		s.refAccum = &entries
+	}
+
 	s.frames = append(s.frames, p)
 	frameIndex := len(s.frames) - 1
 
@@ -116,8 +126,16 @@ func (s *Snapshot) captureSnapshotWithFrames(p *rod.Page) (*yaml.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("snapshot frame %d yaml unmarshal: %w", frameIndex, err)
 	}
-	return s.walk(&snapNode, frameIndex, p)
 
+	result, walkErr := s.walk(&snapNode, frameIndex, p)
+
+	// On the root call, move accumulated refs to refIndex and clear the accumulator.
+	if isRoot {
+		s.refIndex = *s.refAccum
+		s.refAccum = nil
+	}
+
+	return result, walkErr
 }
 
 func (s *Snapshot) walk(node *yaml.Node, frameIndex int, frame *rod.Page) (*yaml.Node, error) {
@@ -161,7 +179,8 @@ func (s *Snapshot) walk(node *yaml.Node, frameIndex int, frame *rod.Page) (*yaml
 	return node, nil
 }
 
-// walkScalarNode processes scalar nodes: adjusts frame refs and expands iframe snapshots.
+// walkScalarNode processes scalar nodes: adjusts frame refs, expands iframe snapshots,
+// and accumulates ref index entries in a single pass.
 func (s *Snapshot) walkScalarNode(node *yaml.Node, frameIndex int, frame *rod.Page) (*yaml.Node, error) {
 	if node.Tag != "!!str" {
 		return node, nil
@@ -175,6 +194,14 @@ func (s *Snapshot) walkScalarNode(node *yaml.Node, frameIndex int, frame *rod.Pa
 	if strings.HasPrefix(value, "iframe ") {
 		if result := s.walkIframeNode(node, frame); result != nil {
 			return result, nil
+		}
+	}
+
+	// Accumulate ref index entries during the walk (avoids a separate tree pass).
+	if s.refAccum != nil {
+		effectiveValue := node.Value
+		if entry, ok := parseRefScalar(effectiveValue); ok {
+			*s.refAccum = append(*s.refAccum, entry)
 		}
 	}
 
@@ -246,6 +273,9 @@ func compactMappingNode(node *yaml.Node) *yaml.Node {
 		keyNode := node.Content[i]
 		valueNode := node.Content[i+1]
 
+		// Cache nodeHasRef result to avoid a second recursive subtree walk below.
+		keyHasRef := nodeHasRef(keyNode)
+
 		filteredKey := compactSnapshot(keyNode)
 		if filteredKey == nil {
 			continue
@@ -254,7 +284,7 @@ func compactMappingNode(node *yaml.Node) *yaml.Node {
 		filteredValue := compactSnapshot(valueNode)
 		if filteredValue == nil {
 			// Key has ref or is structural but value is empty — keep key with empty value
-			if nodeHasRef(keyNode) || isStructuralRole(keyNode.Value) {
+			if keyHasRef || isStructuralRole(keyNode.Value) {
 				filteredValue = &yaml.Node{Kind: yaml.ScalarNode, Value: ""}
 			} else {
 				continue
@@ -352,15 +382,32 @@ var structuralPrefixes = []string{
 	"menu ", "menubar ", "menuitem ", "tab ", "tablist ", "tabpanel ",
 }
 
+// structuralRoleWords is a map of first words from structuralPrefixes for O(1) lookup.
+// Built once at init time from structuralPrefixes.
+var structuralRoleWords map[string]bool
+
+func init() {
+	structuralRoleWords = make(map[string]bool, len(structuralPrefixes))
+	for _, prefix := range structuralPrefixes {
+		// Extract first word (everything before the first space, or the whole string).
+		word := prefix
+		if idx := strings.Index(prefix, " "); idx >= 0 {
+			word = prefix[:idx]
+		}
+		structuralRoleWords[word] = true
+	}
+}
+
 // isStructuralRole checks if a scalar value starts with a structural ARIA role.
+// Uses an O(1) map lookup on the first word of the value instead of a linear scan.
 func isStructuralRole(value string) bool {
 	lower := strings.ToLower(value)
-	for _, prefix := range structuralPrefixes {
-		if strings.HasPrefix(lower, prefix) {
-			return true
-		}
+	// Extract the first word of the value to look up in the map.
+	firstWord := lower
+	if idx := strings.Index(lower, " "); idx >= 0 {
+		firstWord = lower[:idx]
 	}
-	return false
+	return structuralRoleWords[firstWord]
 }
 
 // truncateScalar truncates a string to maxLen, preserving any [ref=...] suffix
@@ -401,39 +448,6 @@ func (s *Snapshot) FindByNameRole(name, role string) []RefEntry {
 		matches = append(matches, entry)
 	}
 	return matches
-}
-
-// buildRefIndex walks the YAML tree and extracts ref metadata from all
-// interactive elements (those with [ref=...] markers).
-func buildRefIndex(node *yaml.Node) []RefEntry {
-	var entries []RefEntry
-	collectRefEntries(node, &entries)
-	return entries
-}
-
-func collectRefEntries(node *yaml.Node, entries *[]RefEntry) {
-	if node == nil {
-		return
-	}
-	switch node.Kind {
-	case yaml.DocumentNode:
-		for _, child := range node.Content {
-			collectRefEntries(child, entries)
-		}
-	case yaml.MappingNode:
-		for i := 0; i < len(node.Content); i += 2 {
-			collectRefEntries(node.Content[i], entries)
-			collectRefEntries(node.Content[i+1], entries)
-		}
-	case yaml.SequenceNode:
-		for _, item := range node.Content {
-			collectRefEntries(item, entries)
-		}
-	case yaml.ScalarNode:
-		if entry, ok := parseRefScalar(node.Value); ok {
-			*entries = append(*entries, entry)
-		}
-	}
 }
 
 // parseRefScalar parses an ARIA snapshot scalar like:

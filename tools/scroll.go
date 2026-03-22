@@ -28,6 +28,8 @@ var (
 var (
 	ScrollHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Scrolling changes visible DOM area; invalidate so Execute rebuilds the snapshot.
+			rodCtx.InvalidateSnapshot()
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("scroll", err)
