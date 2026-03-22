@@ -99,7 +99,7 @@ func RunCmd() (*SubCfg, error) {
 		},
 		Before: func(c *cli.Context) error {
 			if !c.Bool("no-banner") {
-				fmt.Println(banner.ShowBanner())
+				fmt.Fprintln(os.Stderr, banner.ShowBanner())
 			}
 
 			return nil
