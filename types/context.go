@@ -165,15 +165,21 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		if handlerCallOpts.WithSnapshot {
-			snapshot, err := ctx.BuildSnapshot()
-			if err != nil {
-				log.Warnf("Failed to build snapshot: %s", err)
-				snapshot = fmt.Sprintf("(snapshot unavailable: %s)", err)
+			// Use EnsureSnapshot logic: only rebuild if the snapshot was invalidated
+			// (nil) by the handler. This avoids redundant rebuilds when the DOM was
+			// not modified (e.g. consecutive read-only tool calls reuse the cache).
+			snap, snapErr := ctx.EnsureSnapshot()
+			var snapshotText string
+			if snapErr != nil {
+				log.Warnf("Failed to build snapshot: %s", snapErr)
+				snapshotText = fmt.Sprintf("(snapshot unavailable: %s)", snapErr)
+			} else {
+				snapshotText = snap.String()
 			}
-			if snapshot != "" {
+			if snapshotText != "" {
 				result.Content = append(result.Content, mcp.TextContent{
 					Type: "text",
-					Text: snapshot,
+					Text: snapshotText,
 				})
 			}
 		}
@@ -202,6 +208,15 @@ func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
 		return nil, errors.New("no snapshot available, call rod_snapshot first")
 	}
 	return ctx.snapshot, nil
+}
+
+// InvalidateSnapshot marks the current snapshot as stale by clearing it.
+// Call this at the start of any handler that modifies the DOM so that the
+// Execute wrapper (or the next EnsureSnapshot call) rebuilds a fresh snapshot.
+func (ctx *Context) InvalidateSnapshot() {
+	ctx.stateLock.Lock()
+	ctx.snapshot = nil
+	ctx.stateLock.Unlock()
 }
 
 // EnsureSnapshot returns the latest snapshot, building one if none exists.

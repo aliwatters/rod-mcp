@@ -63,6 +63,8 @@ func resolvePosition(page *rod.Page, args map[string]interface{}, selectorKey, x
 var (
 	DragHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Drag modifies DOM layout; invalidate so Execute rebuilds the snapshot.
+			rodCtx.InvalidateSnapshot()
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("drag", err)
