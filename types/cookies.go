@@ -18,6 +18,21 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+// Chrome cookie encryption constants.
+// Reference: https://chromium.googlesource.com/chromium/src/+/main/components/os_crypt/
+const (
+	// chromePBKDF2Salt is the fixed salt used by Chrome's PBKDF2 key derivation.
+	chromePBKDF2Salt = "saltysalt"
+	// chromePBKDF2Iterations is the number of PBKDF2 iterations Chrome uses.
+	chromePBKDF2Iterations = 1003
+	// chromePBKDF2KeyLen is the AES key length in bytes (AES-128).
+	chromePBKDF2KeyLen = 16
+	// chromeEncryptionV10 is the encryption version prefix used by Chrome on Linux.
+	chromeEncryptionV10 = "v10"
+	// chromeEncryptionV11 is the encryption version prefix used by Chrome on macOS.
+	chromeEncryptionV11 = "v11"
+)
+
 // chromeEpochToUnix converts Chrome's expires_utc (microseconds since 1601-01-01)
 // to Unix epoch seconds. Returns 0 for session cookies.
 func chromeEpochToUnix(chromeTimestamp int64) float64 {
@@ -63,8 +78,7 @@ func readChromeEncryptionKey() (string, error) {
 
 // deriveChromeKey derives the AES-128-CBC key from the Keychain password using PBKDF2.
 func deriveChromeKey(password string) ([]byte, error) {
-	salt := []byte("saltysalt")
-	return pbkdf2.Key(sha1.New, password, salt, 1003, 16)
+	return pbkdf2.Key(sha1.New, password, []byte(chromePBKDF2Salt), chromePBKDF2Iterations, chromePBKDF2KeyLen)
 }
 
 // decryptCookieValue decrypts a Chrome encrypted cookie value.
@@ -75,9 +89,9 @@ func decryptCookieValue(encrypted []byte, key []byte) (string, error) {
 		return "", fmt.Errorf("encrypted value too short (%d bytes)", len(encrypted))
 	}
 
-	// Strip the "v10" prefix (or "v11" on newer Chrome).
+	// Strip the version prefix (v10 on Linux, v11 on macOS).
 	prefix := string(encrypted[:3])
-	if prefix != "v10" && prefix != "v11" {
+	if prefix != chromeEncryptionV10 && prefix != chromeEncryptionV11 {
 		return "", fmt.Errorf("unexpected encryption prefix: %q", prefix)
 	}
 	ciphertext := encrypted[3:]
@@ -110,6 +124,89 @@ func decryptCookieValue(encrypted []byte, key []byte) (string, error) {
 	return string(plaintext), nil
 }
 
+// buildDomainFilter constructs an SQL WHERE clause for the given domain patterns.
+// Wildcard patterns (*.example.com) match any subdomain; plain patterns match as a suffix.
+// Returns an error if any pattern is invalid, and an empty string if domains is empty.
+func buildDomainFilter(domains []string) (string, error) {
+	if len(domains) == 0 {
+		return "", nil
+	}
+	var conditions []string
+	for _, d := range domains {
+		d = strings.TrimSpace(d)
+		if d == "" {
+			continue
+		}
+		if !isValidDomainPattern(d) {
+			return "", fmt.Errorf("invalid domain pattern %q", d)
+		}
+		if strings.HasPrefix(d, "*.") {
+			suffix := d[1:]
+			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", suffix))
+		} else {
+			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", d))
+		}
+	}
+	if len(conditions) == 0 {
+		return "", nil
+	}
+	return " WHERE " + strings.Join(conditions, " OR "), nil
+}
+
+// parseCookieLine parses a single tab-separated cookie row from sqlite3 output
+// and returns a CDP-compatible cookie param. The key is used to decrypt the
+// hex-encoded encrypted_value field when no plain-text value is present.
+// Returns nil without error if the cookie has no usable value.
+func parseCookieLine(line string, key []byte) (*proto.NetworkCookieParam, error) {
+	fields := strings.SplitN(line, "\t", 9)
+	if len(fields) < 9 {
+		return nil, nil
+	}
+
+	hostKey := fields[0]
+	name := fields[1]
+	encryptedHex := fields[2]
+	plainValue := fields[3]
+	path := fields[4]
+	isSecure := fields[5] == "1"
+	isHTTPOnly := fields[6] == "1"
+	expiresUTC, _ := strconv.ParseInt(fields[7], 10, 64)
+	sameSite, _ := strconv.Atoi(fields[8])
+
+	var value string
+	if plainValue != "" {
+		value = plainValue
+	} else if encryptedHex != "" {
+		encBytes, err := hex.DecodeString(encryptedHex)
+		if err != nil {
+			return nil, fmt.Errorf("decode hex: %w", err)
+		}
+		decrypted, err := decryptCookieValue(encBytes, key)
+		if err != nil {
+			return nil, fmt.Errorf("decrypt: %w", err)
+		}
+		value = decrypted
+	}
+
+	if value == "" {
+		return nil, nil
+	}
+
+	cookie := &proto.NetworkCookieParam{
+		Name:     name,
+		Value:    value,
+		Domain:   hostKey,
+		Path:     path,
+		Secure:   isSecure,
+		HTTPOnly: isHTTPOnly,
+		SameSite: chromeSameSiteToCDP(sameSite),
+	}
+	if expiresUTC > 0 {
+		cookie.Expires = proto.TimeSinceEpoch(chromeEpochToUnix(expiresUTC))
+	}
+	return cookie, nil
+}
+
 // ReadChromeCookies reads and decrypts cookies from a Chrome profile's Cookies SQLite DB.
 // If domains is non-empty, only cookies matching those domains are returned.
 // Returns CDP-compatible cookie params ready for injection.
@@ -119,7 +216,6 @@ func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCoo
 		return nil, fmt.Errorf("cookies database not found at %s", cookiesDB)
 	}
 
-	// Read encryption key from Keychain.
 	password, err := readChromeEncryptionKey()
 	if err != nil {
 		return nil, err
@@ -134,36 +230,15 @@ func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCoo
 		return nil, fmt.Errorf("sqlite3 not found in PATH")
 	}
 
-	// Build domain filter.
-	whereClause := ""
-	if len(domains) > 0 {
-		var conditions []string
-		for _, d := range domains {
-			d = strings.TrimSpace(d)
-			if d == "" {
-				continue
-			}
-			if !isValidDomainPattern(d) {
-				return nil, fmt.Errorf("invalid domain pattern %q", d)
-			}
-			if strings.HasPrefix(d, "*.") {
-				suffix := d[1:]
-				conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", suffix))
-			} else {
-				conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", d))
-			}
-		}
-		if len(conditions) > 0 {
-			whereClause = " WHERE " + strings.Join(conditions, " OR ")
-		}
+	whereClause, err := buildDomainFilter(domains)
+	if err != nil {
+		return nil, err
 	}
 
-	// Query cookies with hex-encoded encrypted_value for safe transport.
 	query := fmt.Sprintf(
 		"SELECT host_key, name, hex(encrypted_value), value, path, is_secure, is_httponly, expires_utc, samesite FROM cookies%s;",
 		whereClause,
 	)
-
 	cmd := exec.Command(sqlite3Path, "-separator", "\t", cookiesDB, query)
 	out, err := cmd.Output()
 	if err != nil {
@@ -178,67 +253,20 @@ func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCoo
 
 	cookies := make([]*proto.NetworkCookieParam, 0, len(lines))
 	var decryptErrors int
-
 	for _, line := range lines {
-		fields := strings.SplitN(line, "\t", 9)
-		if len(fields) < 9 {
+		cookie, err := parseCookieLine(line, key)
+		if err != nil {
+			decryptErrors++
 			continue
 		}
-
-		hostKey := fields[0]
-		name := fields[1]
-		encryptedHex := fields[2]
-		plainValue := fields[3]
-		path := fields[4]
-		isSecure := fields[5] == "1"
-		isHTTPOnly := fields[6] == "1"
-		expiresUTC, _ := strconv.ParseInt(fields[7], 10, 64)
-		sameSite, _ := strconv.Atoi(fields[8])
-
-		// Try to get the decrypted value.
-		var value string
-		if plainValue != "" {
-			// Some cookies have unencrypted values.
-			value = plainValue
-		} else if encryptedHex != "" {
-			encBytes, err := hex.DecodeString(encryptedHex)
-			if err != nil {
-				decryptErrors++
-				continue
-			}
-			decrypted, err := decryptCookieValue(encBytes, key)
-			if err != nil {
-				decryptErrors++
-				continue
-			}
-			value = decrypted
+		if cookie != nil {
+			cookies = append(cookies, cookie)
 		}
-
-		if value == "" {
-			continue
-		}
-
-		cookie := &proto.NetworkCookieParam{
-			Name:     name,
-			Value:    value,
-			Domain:   hostKey,
-			Path:     path,
-			Secure:   isSecure,
-			HTTPOnly: isHTTPOnly,
-			SameSite: chromeSameSiteToCDP(sameSite),
-		}
-
-		if expiresUTC > 0 {
-			cookie.Expires = proto.TimeSinceEpoch(chromeEpochToUnix(expiresUTC))
-		}
-
-		cookies = append(cookies, cookie)
 	}
 
 	if decryptErrors > 0 {
 		log.Warnf("failed to decrypt %d cookies (skipped)", decryptErrors)
 	}
-
 	log.Infof("read %d cookies from Chrome profile", len(cookies))
 	return cookies, nil
 }

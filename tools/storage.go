@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-rod/rod"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -54,71 +55,15 @@ var (
 
 			switch action {
 			case "get":
-				key, err := getStringArg(args, "key")
-				if err != nil {
-					return toolErr("storage get", err)
-				}
-				r, err := page.Eval(fmt.Sprintf(`(key) => %s.getItem(key)`, storageObj), key)
-				if err != nil {
-					return toolErr("storage get", err)
-				}
-				if r.Value.Nil() {
-					return mcp.NewToolResultText(fmt.Sprintf("Key %q not found in %s", key, storageObj)), nil
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("%s[%q] = %s", storageObj, key, r.Value.Str())), nil
-
+				return storageGet(page, args, storageObj)
 			case "set":
-				key, err := getStringArg(args, "key")
-				if err != nil {
-					return toolErr("storage set", err)
-				}
-				value, err := getStringArg(args, "value")
-				if err != nil {
-					return toolErr("storage set", err)
-				}
-				_, err = page.Eval(fmt.Sprintf(`(key, value) => %s.setItem(key, value)`, storageObj), key, value)
-				if err != nil {
-					return toolErr("storage set", err)
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("Set %s[%q] successfully", storageObj, key)), nil
-
+				return storageSet(page, args, storageObj)
 			case "remove":
-				key, err := getStringArg(args, "key")
-				if err != nil {
-					return toolErr("storage remove", err)
-				}
-				_, err = page.Eval(fmt.Sprintf(`(key) => %s.removeItem(key)`, storageObj), key)
-				if err != nil {
-					return toolErr("storage remove", err)
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("Removed %s[%q] successfully", storageObj, key)), nil
-
+				return storageRemove(page, args, storageObj)
 			case "list":
-				r, err := page.Eval(fmt.Sprintf(`() => {
-					const s = %s;
-					const items = {};
-					for (let i = 0; i < s.length; i++) {
-						const key = s.key(i);
-						items[key] = s.getItem(key);
-					}
-					return JSON.stringify(items, null, 2);
-				}`, storageObj))
-				if err != nil {
-					return toolErr("storage list", err)
-				}
-				val := r.Value.Str()
-				if val == "{}" {
-					return mcp.NewToolResultText(fmt.Sprintf("%s is empty", storageObj)), nil
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("%s contents:\n%s", storageObj, val)), nil
-
+				return storageList(page, storageObj)
 			case "clear":
-				_, err := page.Eval(fmt.Sprintf(`() => %s.clear()`, storageObj))
-				if err != nil {
-					return toolErr("storage clear", err)
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("%s cleared successfully", storageObj)), nil
-
+				return storageClear(page, storageObj)
 			default:
 				return nil, fmt.Errorf("invalid action %q: must be get, set, remove, list, or clear", action)
 			}
@@ -126,3 +71,74 @@ var (
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
+
+func storageGet(page *rod.Page, args map[string]interface{}, storageObj string) (*mcp.CallToolResult, error) {
+	key, err := getStringArg(args, "key")
+	if err != nil {
+		return toolErr("storage get", err)
+	}
+	r, err := page.Eval(fmt.Sprintf(`(key) => %s.getItem(key)`, storageObj), key)
+	if err != nil {
+		return toolErr("storage get", err)
+	}
+	if r.Value.Nil() {
+		return mcp.NewToolResultText(fmt.Sprintf("Key %q not found in %s", key, storageObj)), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("%s[%q] = %s", storageObj, key, r.Value.Str())), nil
+}
+
+func storageSet(page *rod.Page, args map[string]interface{}, storageObj string) (*mcp.CallToolResult, error) {
+	key, err := getStringArg(args, "key")
+	if err != nil {
+		return toolErr("storage set", err)
+	}
+	value, err := getStringArg(args, "value")
+	if err != nil {
+		return toolErr("storage set", err)
+	}
+	_, err = page.Eval(fmt.Sprintf(`(key, value) => %s.setItem(key, value)`, storageObj), key, value)
+	if err != nil {
+		return toolErr("storage set", err)
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Set %s[%q] successfully", storageObj, key)), nil
+}
+
+func storageRemove(page *rod.Page, args map[string]interface{}, storageObj string) (*mcp.CallToolResult, error) {
+	key, err := getStringArg(args, "key")
+	if err != nil {
+		return toolErr("storage remove", err)
+	}
+	_, err = page.Eval(fmt.Sprintf(`(key) => %s.removeItem(key)`, storageObj), key)
+	if err != nil {
+		return toolErr("storage remove", err)
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("Removed %s[%q] successfully", storageObj, key)), nil
+}
+
+func storageList(page *rod.Page, storageObj string) (*mcp.CallToolResult, error) {
+	r, err := page.Eval(fmt.Sprintf(`() => {
+		const s = %s;
+		const items = {};
+		for (let i = 0; i < s.length; i++) {
+			const key = s.key(i);
+			items[key] = s.getItem(key);
+		}
+		return JSON.stringify(items, null, 2);
+	}`, storageObj))
+	if err != nil {
+		return toolErr("storage list", err)
+	}
+	val := r.Value.Str()
+	if val == "{}" {
+		return mcp.NewToolResultText(fmt.Sprintf("%s is empty", storageObj)), nil
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("%s contents:\n%s", storageObj, val)), nil
+}
+
+func storageClear(page *rod.Page, storageObj string) (*mcp.CallToolResult, error) {
+	_, err := page.Eval(fmt.Sprintf(`() => %s.clear()`, storageObj))
+	if err != nil {
+		return toolErr("storage clear", err)
+	}
+	return mcp.NewToolResultText(fmt.Sprintf("%s cleared successfully", storageObj)), nil
+}

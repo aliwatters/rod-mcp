@@ -67,3 +67,14 @@ func (r *RingBuffer[T]) Clear() {
 	r.head = 0
 	r.count = 0
 }
+
+// filterSlice returns items from s for which predicate returns true.
+func filterSlice[T any](s []T, predicate func(T) bool) []T {
+	var result []T
+	for _, item := range s {
+		if predicate(item) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
