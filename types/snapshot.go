@@ -246,6 +246,9 @@ func compactMappingNode(node *yaml.Node) *yaml.Node {
 		keyNode := node.Content[i]
 		valueNode := node.Content[i+1]
 
+		// Cache nodeHasRef result to avoid a second recursive subtree walk below.
+		keyHasRef := nodeHasRef(keyNode)
+
 		filteredKey := compactSnapshot(keyNode)
 		if filteredKey == nil {
 			continue
@@ -254,7 +257,7 @@ func compactMappingNode(node *yaml.Node) *yaml.Node {
 		filteredValue := compactSnapshot(valueNode)
 		if filteredValue == nil {
 			// Key has ref or is structural but value is empty — keep key with empty value
-			if nodeHasRef(keyNode) || isStructuralRole(keyNode.Value) {
+			if keyHasRef || isStructuralRole(keyNode.Value) {
 				filteredValue = &yaml.Node{Kind: yaml.ScalarNode, Value: ""}
 			} else {
 				continue
