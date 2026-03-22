@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/log"
 
-	"github.com/aliwatters/rod-mcp/banner"
 	"github.com/aliwatters/rod-mcp/types"
 )
 
@@ -73,7 +72,7 @@ func main() {
 		cfg.ImageResponses = types.ImageResponsesOmit
 	}
 
-	cfg.ServerVersion = banner.Version
+	cfg.ServerVersion = Version
 
 	runner := NewRunner(ctx, *cfg)
 	go func() {

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/aliwatters/rod-mcp/utils"
+	"github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 )
 
@@ -112,7 +113,9 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	if !exist {
-		return nil, fmt.Errorf("config path %s not found", configPath)
+		log.Warnf("config file %s not found, using defaults", configPath)
+		config := DefaultConfig
+		return &config, nil
 	}
 
 	file, err := os.Open(configPath)
