@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
@@ -18,10 +17,14 @@ func toolErr(action string, err error) (*mcp.CallToolResult, error) {
 	return nil, toolError(action, err)
 }
 
-const (
-	defaultWaitStableDur = 1 * time.Second
-	defaultDomDiff       = 0.2
-)
+// truncateContent truncates s to maxLen characters and appends a truncation notice.
+// If s is already within maxLen, it is returned unchanged with truncated=false.
+func truncateContent(s string, maxLen int) (string, bool) {
+	if len(s) <= maxLen {
+		return s, false
+	}
+	return s[:maxLen], true
+}
 
 // waitDOMStable waits for the DOM to stabilize, logging errors at debug level.
 func waitDOMStable(page *rod.Page) {

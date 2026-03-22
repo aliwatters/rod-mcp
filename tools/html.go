@@ -12,9 +12,6 @@ import (
 
 const (
 	HTMLToolKey = "rod_html"
-
-	// maxHTMLLength is the maximum number of characters returned to prevent token explosion.
-	maxHTMLLength = 100000
 )
 
 var (
@@ -65,14 +62,8 @@ var (
 				}
 			}
 
-			truncated := false
-			if len(html) > maxHTMLLength {
-				html = html[:maxHTMLLength]
-				truncated = true
-			}
-
-			if truncated {
-				html += fmt.Sprintf("\n\n... (truncated at %d characters)", maxHTMLLength)
+			if s, ok := truncateContent(html, defaultMaxContentLength); ok {
+				html = s + fmt.Sprintf("\n\n... (truncated at %d characters)", defaultMaxContentLength)
 			}
 
 			return mcp.NewToolResultText(html), nil

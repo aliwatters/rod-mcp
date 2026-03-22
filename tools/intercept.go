@@ -24,7 +24,7 @@ var (
 		mcp.WithDescription("Intercept network requests to mock responses, block requests, or simulate errors. Enable interception first, then add rules. Each intercepted request is matched against rules in order."),
 		mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("enable", "mock", "block", "fail", "disable", "list")),
 		mcp.WithString("urlPattern", mcp.Description("URL pattern to match (wildcards: * = zero or more, ? = exactly one). Required for mock, block, fail.")),
-		mcp.WithNumber("status", mcp.Description("HTTP status code for mock response (default: 200)")),
+		mcp.WithNumber("status", mcp.Description(fmt.Sprintf("HTTP status code for mock response (default: %d)", defaultHTTPStatus))),
 		mcp.WithObject("headers", mcp.Description("Response headers for mock response as key-value pairs")),
 		mcp.WithString("body", mcp.Description("Response body for mock response")),
 		mcp.WithString("errorReason", mcp.Description("Error reason for fail action"), mcp.Enum("Failed", "Aborted", "TimedOut", "AccessDenied", "ConnectionClosed", "ConnectionReset", "ConnectionRefused", "ConnectionAborted", "ConnectionFailed", "NameNotResolved", "InternetDisconnected", "AddressUnreachable", "BlockedByClient", "BlockedByResponse")),
@@ -126,7 +126,7 @@ func interceptMock(rodCtx *types.Context, args map[string]any) (*mcp.CallToolRes
 	if err != nil {
 		return toolErr("intercept mock", err)
 	}
-	status := int(getOptionalFloatArg(args, "status", 200))
+	status := int(getOptionalFloatArg(args, "status", float64(defaultHTTPStatus)))
 	body := getOptionalStringArg(args, "body")
 
 	var headers []*proto.FetchHeaderEntry
