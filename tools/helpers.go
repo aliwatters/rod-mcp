@@ -17,8 +17,8 @@ func toolErr(action string, err error) (*mcp.CallToolResult, error) {
 	return nil, toolError(action, err)
 }
 
-// truncateContent truncates s to maxLen characters and appends a truncation notice.
-// If s is already within maxLen, it is returned unchanged with truncated=false.
+// truncateContent truncates s to maxLen characters.
+// Returns the (possibly truncated) string and whether truncation occurred.
 func truncateContent(s string, maxLen int) (string, bool) {
 	if len(s) <= maxLen {
 		return s, false
