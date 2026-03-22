@@ -90,7 +90,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 						ResponseHeaders: rule.Headers,
 						Body:            rule.Body,
 					}).Call(page); err != nil {
-						log.Debugf("fulfill request %s: %s", e.RequestID, err)
+						log.Warnf("fulfill request %s: %s", e.RequestID, err)
 					}
 					return
 				case "block", "fail":
@@ -102,7 +102,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 						RequestID:   e.RequestID,
 						ErrorReason: reason,
 					}).Call(page); err != nil {
-						log.Debugf("fail request %s: %s", e.RequestID, err)
+						log.Warnf("fail request %s: %s", e.RequestID, err)
 					}
 					return
 				}
@@ -111,7 +111,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 		if err := (proto.FetchContinueRequest{
 			RequestID: e.RequestID,
 		}).Call(page); err != nil {
-			log.Debugf("continue request %s: %s", e.RequestID, err)
+			log.Warnf("continue request %s: %s", e.RequestID, err)
 		}
 	})()
 
