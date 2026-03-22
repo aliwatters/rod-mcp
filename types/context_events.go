@@ -139,12 +139,9 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 	defer ctx.stateLock.Unlock()
 
 	all := ctx.consoleMessages.Slice()
-	var result []ConsoleMessage
-	for _, msg := range all {
-		if filterLevel == "" || msg.Level == filterLevel {
-			result = append(result, msg)
-		}
-	}
+	result := filterSlice(all, func(msg ConsoleMessage) bool {
+		return filterLevel == "" || msg.Level == filterLevel
+	})
 
 	if clear {
 		if filterLevel == "" {
@@ -152,10 +149,10 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 		} else {
 			// Rebuild the buffer keeping only non-matching messages.
 			fresh := NewRingBuffer[ConsoleMessage](maxConsoleMessages)
-			for _, msg := range all {
-				if msg.Level != filterLevel {
-					fresh.Add(msg)
-				}
+			for _, msg := range filterSlice(all, func(msg ConsoleMessage) bool {
+				return msg.Level != filterLevel
+			}) {
+				fresh.Add(msg)
 			}
 			ctx.consoleMessages = fresh
 		}
@@ -170,16 +167,15 @@ func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) 
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
-	var result []NetworkRequest
-	for _, req := range ctx.networkRequests.Slice() {
+	result := filterSlice(ctx.networkRequests.Slice(), func(req NetworkRequest) bool {
 		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
-			continue
+			return false
 		}
 		if filterMethod != "" && !strings.EqualFold(req.Method, filterMethod) {
-			continue
+			return false
 		}
-		result = append(result, req)
-	}
+		return true
+	})
 
 	if clear {
 		ctx.networkRequests.Clear()
@@ -235,17 +231,15 @@ func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFram
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
-	var result []WebSocketFrame
-	for _, f := range ctx.wsFrames.Slice() {
+	return filterSlice(ctx.wsFrames.Slice(), func(f WebSocketFrame) bool {
 		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
-			continue
+			return false
 		}
 		if direction != "" && f.Direction != direction {
-			continue
+			return false
 		}
-		result = append(result, f)
-	}
-	return result
+		return true
+	})
 }
 
 // ClearWebSocketData clears all WebSocket connections and frames.
