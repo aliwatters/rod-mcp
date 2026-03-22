@@ -220,7 +220,7 @@ var (
 				msg := fmt.Sprintf("Dialog %sed successfully (type: %s, message: %q)",
 					action, dr.evt.Type, dr.evt.Message)
 				return mcp.NewToolResultText(msg), nil
-			case <-time.After(30 * time.Second):
+			case <-time.After(defaultDialogTimeout):
 				return mcp.NewToolResultText("No dialog appeared within timeout"), nil
 			}
 		}

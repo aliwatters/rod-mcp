@@ -21,7 +21,7 @@ var (
 	ResponseBody = mcp.NewTool(ResponseBodyToolKey,
 		mcp.WithDescription("Get the response body of a captured network request. Use rod_network_requests first to see available requests and their indices."),
 		mcp.WithNumber("index", mcp.Description("Index of the request from rod_network_requests output (0-based)"), mcp.Required()),
-		mcp.WithNumber("maxLength", mcp.Description("Maximum response body length to return in characters (default: 100000)")),
+		mcp.WithNumber("maxLength", mcp.Description(fmt.Sprintf("Maximum response body length to return in characters (default: %d)", defaultMaxContentLength))),
 	)
 )
 
@@ -38,7 +38,7 @@ var (
 			if err != nil {
 				return toolErr("response body", err)
 			}
-			maxLength := int(getOptionalFloatArg(args, "maxLength", 100000))
+			maxLength := int(getOptionalFloatArg(args, "maxLength", float64(defaultMaxContentLength)))
 
 			requestID, err := rodCtx.GetRequestID(int(index))
 			if err != nil {
@@ -61,11 +61,7 @@ var (
 				body = string(decoded)
 			}
 
-			truncated := false
-			if len(body) > maxLength {
-				body = body[:maxLength]
-				truncated = true
-			}
+			body, truncated := truncateContent(body, maxLength)
 
 			var sb strings.Builder
 			sb.WriteString(fmt.Sprintf("Response body (request #%d):\n", int(index)))

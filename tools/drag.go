@@ -131,7 +131,7 @@ var (
 				}).Call(page); err != nil {
 					return toolErr("mouse move", err)
 				}
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(dragStepDelay)
 			}
 
 			// Release at end
