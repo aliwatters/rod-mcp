@@ -77,7 +77,12 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 
 	rodCtx.SetInterceptEnabled(true)
 
-	go page.EachEvent(func(e *proto.FetchRequestPaused) {
+	// Use a cancelable page copy so the goroutine can be stopped when
+	// interception is disabled or the page is closed.
+	cancelPage, cancelFn := page.WithCancel()
+	rodCtx.SetInterceptCancel(cancelFn)
+
+	go cancelPage.EachEvent(func(e *proto.FetchRequestPaused) {
 		rules := rodCtx.InterceptRules()
 
 		for _, rule := range rules {
@@ -89,7 +94,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 						ResponseCode:    rule.Status,
 						ResponseHeaders: rule.Headers,
 						Body:            rule.Body,
-					}).Call(page); err != nil {
+					}).Call(cancelPage); err != nil {
 						log.Warnf("fulfill request %s: %s", e.RequestID, err)
 					}
 					return
@@ -101,7 +106,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 					if err := (proto.FetchFailRequest{
 						RequestID:   e.RequestID,
 						ErrorReason: reason,
-					}).Call(page); err != nil {
+					}).Call(cancelPage); err != nil {
 						log.Warnf("fail request %s: %s", e.RequestID, err)
 					}
 					return
@@ -110,7 +115,7 @@ func interceptEnable(rodCtx *types.Context, page *rod.Page) (*mcp.CallToolResult
 		}
 		if err := (proto.FetchContinueRequest{
 			RequestID: e.RequestID,
-		}).Call(page); err != nil {
+		}).Call(cancelPage); err != nil {
 			log.Warnf("continue request %s: %s", e.RequestID, err)
 		}
 	})()

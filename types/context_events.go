@@ -49,9 +49,15 @@ type WebSocketFrame struct {
 	Opcode      int    `json:"opcode"`
 }
 
-// attachEventListeners registers goroutine-based listeners for console messages and network requests.
-func (ctx *Context) attachEventListeners(page *rod.Page) {
-	go page.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
+// attachEventListeners registers goroutine-based listeners for console messages
+// and network requests on a cancelable page copy. It returns a cancel function
+// that stops all listener goroutines; callers must invoke it when the page is
+// no longer needed to avoid goroutine leaks.
+func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
+	// Create a cancelable copy of the page so that cancelling stops EachEvent.
+	cancelPage, cancelFn := page.WithCancel()
+
+	go cancelPage.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
 		var parts []string
 		for _, arg := range e.Args {
 			parts = append(parts, arg.Value.String())
@@ -135,6 +141,8 @@ func (ctx *Context) attachEventListeners(page *rod.Page) {
 		}
 		ctx.stateLock.Unlock()
 	})()
+
+	return cancelFn
 }
 
 // ConsoleMessages returns captured console messages, optionally filtered by level.
