@@ -40,6 +40,8 @@ var (
 // (go back, go forward, reload) that share the same pattern.
 func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page) error) server.ToolHandlerFunc {
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
+		rodCtx.InvalidateSnapshot()
 		page, err := rodCtx.ControlledPage()
 		if err != nil {
 			return toolErr(name, err)
@@ -56,6 +58,8 @@ func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page)
 var (
 	NavigationHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
+			rodCtx.InvalidateSnapshot()
 			url, err := getStringArg(request.GetArguments(), "url")
 			if err != nil {
 				return toolErr("navigate", err)
