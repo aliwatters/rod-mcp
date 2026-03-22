@@ -44,6 +44,10 @@ type Context struct {
 	config          Config
 	browser         *rod.Browser
 	page            *rod.Page
+	// pageCancel cancels event-listener goroutines attached to the current page.
+	// It is set when attachEventListeners creates a cancelable page copy, and
+	// called in closePage before the page is closed.
+	pageCancel      func()
 	stateLock       sync.Mutex
 	snapshot        *Snapshot
 	mode            Mode
@@ -54,6 +58,8 @@ type Context struct {
 	// Intercept state
 	interceptRules   []InterceptRule
 	interceptEnabled bool
+	// interceptCancel cancels the EachEvent goroutine started by interceptEnable.
+	interceptCancel func()
 	// WebSocket tracking
 	wsConnections []WebSocketConnection
 	wsConnIndex   map[string]int // requestID → index in wsConnections
@@ -222,6 +228,17 @@ func (ctx *Context) closePage() error {
 	if ctx.page == nil {
 		return nil
 	}
+	// Cancel event listener goroutines before closing the page to avoid
+	// goroutine leaks and use-after-close races on the page's CDP session.
+	if ctx.pageCancel != nil {
+		ctx.pageCancel()
+		ctx.pageCancel = nil
+	}
+	// Cancel any intercept listener goroutine as well.
+	if ctx.interceptCancel != nil {
+		ctx.interceptCancel()
+		ctx.interceptCancel = nil
+	}
 	err := ctx.page.Close()
 	if err != nil {
 		return fmt.Errorf("close page: %w", err)
@@ -266,7 +283,8 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
-	ctx.attachEventListeners(page)
+	cancel := ctx.attachEventListeners(page)
+	ctx.pageCancel = cancel
 
 	return page, nil
 }

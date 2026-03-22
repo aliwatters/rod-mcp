@@ -22,13 +22,29 @@ func (ctx *Context) InterceptEnabled() bool {
 }
 
 // SetInterceptEnabled sets whether interception is enabled.
+// When disabling, any existing intercept listener goroutine is cancelled.
 func (ctx *Context) SetInterceptEnabled(enabled bool) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 	ctx.interceptEnabled = enabled
 	if !enabled {
 		ctx.interceptRules = nil
+		if ctx.interceptCancel != nil {
+			ctx.interceptCancel()
+			ctx.interceptCancel = nil
+		}
 	}
+}
+
+// SetInterceptCancel stores the cancel function for the intercept EachEvent goroutine.
+func (ctx *Context) SetInterceptCancel(cancel func()) {
+	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
+	// Cancel any prior listener before replacing.
+	if ctx.interceptCancel != nil {
+		ctx.interceptCancel()
+	}
+	ctx.interceptCancel = cancel
 }
 
 // AddInterceptRule appends an interception rule.
