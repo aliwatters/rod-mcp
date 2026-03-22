@@ -31,73 +31,14 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		return nil, "", fmt.Errorf("--no-clone and --clone-all are mutually exclusive")
 	}
 
-	// Determine the user data directory for Chrome.
-	var userDataDir string
-	if cfg.UserDataDir != "" {
-		if cfg.NoClone {
-			// Use the profile directly — user accepted the risk.
-			log.Warnf("--no-clone: using profile directly at %s (Chrome must not be running with this profile)", cfg.UserDataDir)
-			userDataDir = cfg.UserDataDir
-		} else if cfg.CloneAll {
-			// Full recursive clone — slow but complete.
-			log.Warnf("--clone-all: cloning ENTIRE Chrome profile — this includes passwords, history, extensions, and all browser data")
-			clonedDir, err = cloneProfileFull(cfg.UserDataDir)
-			if err != nil {
-				return nil, "", fmt.Errorf("full profile clone: %w", err)
-			}
-			userDataDir = clonedDir
-		} else {
-			// Default: selective clone with domain-scoped cookies.
-			clonedDir, err = cloneProfile(cfg.UserDataDir, cfg.CloneDomains)
-			if err != nil {
-				return nil, "", fmt.Errorf("profile clone: %w", err)
-			}
-			userDataDir = clonedDir
-		}
-	} else {
-		if cfg.BrowserTempDir == "" {
-			cfg.BrowserTempDir = DefaultBrowserTempDir
-		}
-		// browser must own a unique temp dir
-		userDataDir = fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(tempDirSuffixLen))
+	userDataDir, clonedDir, err := resolveUserDataDir(cfg)
+	if err != nil {
+		return nil, "", err
 	}
 
-	browserLauncher := launcher.New().
-		Context(ctx).
-		Headless(cfg.Headless).
-		NoSandbox(cfg.NoSandbox).
-		Set("no-gpu").
-		Set("--no-first-run").
-		Set("ignore-certificate-errors").
-		Set("disable-xss-auditor", "true").
-		Set("disable-popup-blocking").
-		Set("mute-audio", "true").
-		Set("use-mock-keychain").
-		Set("--remote-allow-origins", "*").
-		Set("--disable-dev-shm-usage").
-		Set("--disable-features", "HttpsUpgrades,PasswordLeakDetection").
-		UserDataDir(userDataDir)
-
-	if cfg.BrowserBinPath != "" {
-		browserLauncher.Bin(cfg.BrowserBinPath)
-	} else {
-		if browserPath, has := launcher.LookPath(); has {
-			browserLauncher.Bin(browserPath)
-		} else {
-			return nil, "", errors.New("Chrome not found; set browserBinPath in config or install Chrome/Chromium")
-		}
-	}
-
-	if cfg.ChromeDebugPort != "" {
-		port, err := strconv.Atoi(cfg.ChromeDebugPort)
-		if err != nil || port < 1 || port > 65535 {
-			return nil, "", fmt.Errorf("invalid chrome-debug-port %q: must be 1-65535", cfg.ChromeDebugPort)
-		}
-		browserLauncher.Set("remote-debugging-port", cfg.ChromeDebugPort)
-	}
-
-	if cfg.Proxy != "" {
-		browserLauncher.Proxy(cfg.Proxy)
+	browserLauncher, err := configureLauncher(ctx, cfg, userDataDir)
+	if err != nil {
+		return nil, "", err
 	}
 
 	controlUrl, err := browserLauncher.Launch()
@@ -126,6 +67,85 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 	}
 
 	return b, clonedDir, nil
+}
+
+// resolveUserDataDir determines the Chrome user data directory to use based on
+// the Config settings. It clones the profile if needed and returns the path to
+// use as well as the cloned temp directory (empty string when no clone was made).
+func resolveUserDataDir(cfg Config) (userDataDir, clonedDir string, err error) {
+	if cfg.UserDataDir != "" {
+		if cfg.NoClone {
+			// Use the profile directly — user accepted the risk.
+			log.Warnf("--no-clone: using profile directly at %s (Chrome must not be running with this profile)", cfg.UserDataDir)
+			return cfg.UserDataDir, "", nil
+		} else if cfg.CloneAll {
+			// Full recursive clone — slow but complete.
+			log.Warnf("--clone-all: cloning ENTIRE Chrome profile — this includes passwords, history, extensions, and all browser data")
+			clonedDir, err = cloneProfileFull(cfg.UserDataDir)
+			if err != nil {
+				return "", "", fmt.Errorf("full profile clone: %w", err)
+			}
+			return clonedDir, clonedDir, nil
+		} else {
+			// Default: selective clone with domain-scoped cookies.
+			clonedDir, err = cloneProfile(cfg.UserDataDir, cfg.CloneDomains)
+			if err != nil {
+				return "", "", fmt.Errorf("profile clone: %w", err)
+			}
+			return clonedDir, clonedDir, nil
+		}
+	}
+
+	// No user-data-dir configured — use a unique temp subdirectory.
+	if cfg.BrowserTempDir == "" {
+		cfg.BrowserTempDir = DefaultBrowserTempDir
+	}
+	dir := fmt.Sprintf("%s/%s", cfg.BrowserTempDir, utils.RandomString(tempDirSuffixLen))
+	return dir, "", nil
+}
+
+// configureLauncher builds a rod launcher with all Chrome flags applied from cfg.
+// The returned launcher is ready to call Launch() on.
+func configureLauncher(ctx context.Context, cfg Config, userDataDir string) (*launcher.Launcher, error) {
+	l := launcher.New().
+		Context(ctx).
+		Headless(cfg.Headless).
+		NoSandbox(cfg.NoSandbox).
+		Set("no-gpu").
+		Set("--no-first-run").
+		Set("ignore-certificate-errors").
+		Set("disable-xss-auditor", "true").
+		Set("disable-popup-blocking").
+		Set("mute-audio", "true").
+		Set("use-mock-keychain").
+		Set("--remote-allow-origins", "*").
+		Set("--disable-dev-shm-usage").
+		Set("--disable-features", "HttpsUpgrades,PasswordLeakDetection").
+		UserDataDir(userDataDir)
+
+	if cfg.BrowserBinPath != "" {
+		l.Bin(cfg.BrowserBinPath)
+	} else {
+		if browserPath, has := launcher.LookPath(); has {
+			l.Bin(browserPath)
+		} else {
+			return nil, errors.New("Chrome not found; set browserBinPath in config or install Chrome/Chromium")
+		}
+	}
+
+	if cfg.ChromeDebugPort != "" {
+		port, err := strconv.Atoi(cfg.ChromeDebugPort)
+		if err != nil || port < 1 || port > 65535 {
+			return nil, fmt.Errorf("invalid chrome-debug-port %q: must be 1-65535", cfg.ChromeDebugPort)
+		}
+		l.Set("remote-debugging-port", cfg.ChromeDebugPort)
+	}
+
+	if cfg.Proxy != "" {
+		l.Proxy(cfg.Proxy)
+	}
+
+	return l, nil
 }
 
 func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error) {
