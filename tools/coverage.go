@@ -99,13 +99,9 @@ func formatCoverageEntry(label string, used, total int) string {
 }
 
 // formatCoverageTotal formats the grand total line for a coverage section.
-func formatCoverageTotal(prefix string, used, total int, trailingNewline bool) string {
+func formatCoverageTotal(prefix string, used, total int) string {
 	pct := float64(used) / float64(total) * 100
-	suffix := "\n"
-	if trailingNewline {
-		suffix = "\n\n"
-	}
-	return fmt.Sprintf("\n%s Total: %.1f%% (%d/%d bytes)%s", prefix, pct, used, total, suffix)
+	return fmt.Sprintf("\n%s Total: %.1f%% (%d/%d bytes)\n", prefix, pct, used, total)
 }
 
 func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, error) {
@@ -142,7 +138,8 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 				}
 			}
 			if totalBytes > 0 {
-				result.WriteString(formatCoverageTotal("JS", usedBytes, totalBytes, true))
+				result.WriteString(formatCoverageTotal("JS", usedBytes, totalBytes))
+				result.WriteString("\n")
 			}
 		}
 	}
@@ -183,7 +180,7 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 				}
 			}
 			if totalBytes > 0 {
-				result.WriteString(formatCoverageTotal("CSS", usedBytes, totalBytes, false))
+				result.WriteString(formatCoverageTotal("CSS", usedBytes, totalBytes))
 			}
 		}
 	}
