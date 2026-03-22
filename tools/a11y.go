@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -59,60 +60,75 @@ var A11yAuditHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		if err != nil {
 			return toolErr("a11y audit: get accessibility tree", err)
 		}
+		axIssues, stats := analyzeAXTree(tree.Nodes)
 
-		// Also get DOM info for elements missing a11y names via JavaScript.
-		jsAudit := buildJSAuditScript(selector)
-		domResult, err := page.Eval(jsAudit)
+		// Run the JS-based DOM audit for issues not visible in the AX tree.
+		jsIssues, err := runJSAudit(page, selector)
 		if err != nil {
 			return toolErr("a11y audit: DOM scan", err)
 		}
 
-		var domIssues []a11yIssue
-		if err := json.Unmarshal([]byte(domResult.Value.String()), &domIssues); err != nil {
-			return toolErr("a11y audit: parse DOM results", err)
-		}
-
-		// Analyze the CDP accessibility tree for additional issues.
-		axIssues, axStats := analyzeAXTree(tree.Nodes)
-
-		// Merge issues (DOM-based + AX tree-based), dedup by rule+selector.
-		allIssues := deduplicateIssues(append(domIssues, axIssues...))
-
-		var errors, warnings int
-		for _, issue := range allIssues {
-			switch issue.Severity {
-			case "error":
-				errors++
-			case "warning":
-				warnings++
-			}
-		}
-
-		coverage := "100%"
-		if axStats.total > 0 {
-			pct := float64(axStats.named) / float64(axStats.total) * 100
-			coverage = fmt.Sprintf("%.1f%%", pct)
-		}
-
-		report := a11yReport{
-			Issues: allIssues,
-			Summary: a11ySummary{
-				Errors:          errors,
-				Warnings:        warnings,
-				ElementsScanned: axStats.total,
-				ElementsNamed:   axStats.named,
-				Coverage:        coverage,
-			},
-		}
-
-		reportJSON, err := json.MarshalIndent(report, "", "  ")
+		reportJSON, err := mergeAndFormatReport(axIssues, jsIssues, stats)
 		if err != nil {
 			return toolErr("a11y audit: marshal report", err)
 		}
 
-		return mcp.NewToolResultText(string(reportJSON)), nil
+		return mcp.NewToolResultText(reportJSON), nil
 	}
 	return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+}
+
+// runJSAudit executes the embedded JS audit on the page for the given selector
+// and returns the parsed list of a11y issues.
+func runJSAudit(page *rod.Page, selector string) ([]a11yIssue, error) {
+	domResult, err := page.Eval(buildJSAuditScript(selector))
+	if err != nil {
+		return nil, err
+	}
+	var issues []a11yIssue
+	if err := json.Unmarshal([]byte(domResult.Value.String()), &issues); err != nil {
+		return nil, err
+	}
+	return issues, nil
+}
+
+// mergeAndFormatReport merges AX-tree issues and JS-DOM issues, deduplicates
+// them, tallies severities, and returns the formatted JSON report string.
+func mergeAndFormatReport(axIssues, jsIssues []a11yIssue, stats axStats) (string, error) {
+	allIssues := deduplicateIssues(append(jsIssues, axIssues...))
+
+	var errors, warnings int
+	for _, issue := range allIssues {
+		switch issue.Severity {
+		case "error":
+			errors++
+		case "warning":
+			warnings++
+		}
+	}
+
+	coverage := "100%"
+	if stats.total > 0 {
+		pct := float64(stats.named) / float64(stats.total) * 100
+		coverage = fmt.Sprintf("%.1f%%", pct)
+	}
+
+	report := a11yReport{
+		Issues: allIssues,
+		Summary: a11ySummary{
+			Errors:          errors,
+			Warnings:        warnings,
+			ElementsScanned: stats.total,
+			ElementsNamed:   stats.named,
+			Coverage:        coverage,
+		},
+	}
+
+	out, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }
 
 type axStats struct {
