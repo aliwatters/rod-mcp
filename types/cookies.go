@@ -18,6 +18,21 @@ import (
 	"github.com/go-rod/rod/lib/proto"
 )
 
+// Chrome cookie encryption constants.
+// Reference: https://chromium.googlesource.com/chromium/src/+/main/components/os_crypt/
+const (
+	// chromePBKDF2Salt is the fixed salt used by Chrome's PBKDF2 key derivation.
+	chromePBKDF2Salt = "saltysalt"
+	// chromePBKDF2Iterations is the number of PBKDF2 iterations Chrome uses.
+	chromePBKDF2Iterations = 1003
+	// chromePBKDF2KeyLen is the AES key length in bytes (AES-128).
+	chromePBKDF2KeyLen = 16
+	// chromeEncryptionV10 is the encryption version prefix used by Chrome on Linux.
+	chromeEncryptionV10 = "v10"
+	// chromeEncryptionV11 is the encryption version prefix used by Chrome on macOS.
+	chromeEncryptionV11 = "v11"
+)
+
 // chromeEpochToUnix converts Chrome's expires_utc (microseconds since 1601-01-01)
 // to Unix epoch seconds. Returns 0 for session cookies.
 func chromeEpochToUnix(chromeTimestamp int64) float64 {
@@ -63,8 +78,7 @@ func readChromeEncryptionKey() (string, error) {
 
 // deriveChromeKey derives the AES-128-CBC key from the Keychain password using PBKDF2.
 func deriveChromeKey(password string) ([]byte, error) {
-	salt := []byte("saltysalt")
-	return pbkdf2.Key(sha1.New, password, salt, 1003, 16)
+	return pbkdf2.Key(sha1.New, password, []byte(chromePBKDF2Salt), chromePBKDF2Iterations, chromePBKDF2KeyLen)
 }
 
 // decryptCookieValue decrypts a Chrome encrypted cookie value.
@@ -75,9 +89,9 @@ func decryptCookieValue(encrypted []byte, key []byte) (string, error) {
 		return "", fmt.Errorf("encrypted value too short (%d bytes)", len(encrypted))
 	}
 
-	// Strip the "v10" prefix (or "v11" on newer Chrome).
+	// Strip the version prefix (v10 on Linux, v11 on macOS).
 	prefix := string(encrypted[:3])
-	if prefix != "v10" && prefix != "v11" {
+	if prefix != chromeEncryptionV10 && prefix != chromeEncryptionV11 {
 		return "", fmt.Errorf("unexpected encryption prefix: %q", prefix)
 	}
 	ciphertext := encrypted[3:]
