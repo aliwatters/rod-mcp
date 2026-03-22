@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aliwatters/rod-mcp/banner"
 	"github.com/aliwatters/rod-mcp/types"
 	"github.com/urfave/cli/v2"
 )
@@ -31,7 +30,7 @@ func RunCmd() (*SubCfg, error) {
 		Name:        "Rod MCP Server",
 		Description: "Model Context Protocol Server of Rod",
 		Usage:       "rod-mcp is a rod mcp server",
-		Version:     banner.Version,
+		Version:     Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:        "config",
@@ -73,11 +72,6 @@ func RunCmd() (*SubCfg, error) {
 				Destination: &subConfig.Headless,
 			},
 			&cli.BoolFlag{
-				Name:    "no-banner",
-				Aliases: []string{"nb"},
-				Usage:   "use to disable show banner",
-			},
-			&cli.BoolFlag{
 				Name:    "vision",
 				Aliases: []string{"vs"},
 				Usage:   "use to support vision LLM will load  vision tools",
@@ -96,13 +90,10 @@ func RunCmd() (*SubCfg, error) {
 				Name:    "omit-images",
 				Usage:   "omit inline base64 image data from screenshot results (saves tokens)",
 			},
-		},
-		Before: func(c *cli.Context) error {
-			if !c.Bool("no-banner") {
-				fmt.Fprintln(os.Stderr, banner.ShowBanner())
-			}
-
-			return nil
+			&cli.BoolFlag{
+				Name:   "no-banner",
+				Hidden: true,
+			},
 		},
 		Action: func(c *cli.Context) error {
 			if c.Bool("headless") {
