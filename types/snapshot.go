@@ -355,15 +355,32 @@ var structuralPrefixes = []string{
 	"menu ", "menubar ", "menuitem ", "tab ", "tablist ", "tabpanel ",
 }
 
+// structuralRoleWords is a map of first words from structuralPrefixes for O(1) lookup.
+// Built once at init time from structuralPrefixes.
+var structuralRoleWords map[string]bool
+
+func init() {
+	structuralRoleWords = make(map[string]bool, len(structuralPrefixes))
+	for _, prefix := range structuralPrefixes {
+		// Extract first word (everything before the first space, or the whole string).
+		word := prefix
+		if idx := strings.Index(prefix, " "); idx >= 0 {
+			word = prefix[:idx]
+		}
+		structuralRoleWords[word] = true
+	}
+}
+
 // isStructuralRole checks if a scalar value starts with a structural ARIA role.
+// Uses an O(1) map lookup on the first word of the value instead of a linear scan.
 func isStructuralRole(value string) bool {
 	lower := strings.ToLower(value)
-	for _, prefix := range structuralPrefixes {
-		if strings.HasPrefix(lower, prefix) {
-			return true
-		}
+	// Extract the first word of the value to look up in the map.
+	firstWord := lower
+	if idx := strings.Index(lower, " "); idx >= 0 {
+		firstWord = lower[:idx]
 	}
-	return false
+	return structuralRoleWords[firstWord]
 }
 
 // truncateScalar truncates a string to maxLen, preserving any [ref=...] suffix
