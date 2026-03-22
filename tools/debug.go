@@ -16,9 +16,6 @@ const (
 	WaitForToolKey         = "rod_wait_for"
 	ConsoleMessagesToolKey = "rod_console_messages"
 	NetworkRequestsToolKey = "rod_network_requests"
-
-	// defaultWaitTimeoutMs is the default timeout for wait operations in milliseconds.
-	defaultWaitTimeoutMs = 30000.0
 )
 
 var (

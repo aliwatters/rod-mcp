@@ -3,7 +3,6 @@ package tools
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
@@ -18,10 +17,14 @@ func toolErr(action string, err error) (*mcp.CallToolResult, error) {
 	return nil, toolError(action, err)
 }
 
-const (
-	defaultWaitStableDur = 1 * time.Second
-	defaultDomDiff       = 0.2
-)
+// truncateContent truncates s to maxLen characters.
+// Returns the (possibly truncated) string and whether truncation occurred.
+func truncateContent(s string, maxLen int) (string, bool) {
+	if len(s) <= maxLen {
+		return s, false
+	}
+	return s[:maxLen], true
+}
 
 // waitDOMStable waits for the DOM to stabilize, logging errors at debug level.
 func waitDOMStable(page *rod.Page) {
@@ -53,33 +56,43 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 		return nil, nil, ele, fmt.Errorf("%s %s: either 'ref' or 'name' must be provided", toolName, ele)
 	}
 
-	// If ref is provided, use the existing fast path.
+	var element *rod.Element
 	if ref != "" {
-		snapshot, err := rodCtx.LatestSnapshot()
-		if err != nil {
-			return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
-		}
-		element, err := snapshot.LocatorInFrame(ref)
-		if err != nil {
-			return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
-		}
-		return page, element, ele, nil
+		element, err = resolveByRef(rodCtx, ref)
+	} else {
+		role := getOptionalStringArg(args, "role")
+		element, err = resolveByName(rodCtx, name, role)
 	}
+	if err != nil {
+		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
+	}
+	return page, element, ele, nil
+}
 
-	// Name-based semantic targeting: build a snapshot and search by name/role.
+// resolveByRef locates an element using an exact snapshot ref (e.g. "e42" or "f1e7").
+func resolveByRef(rodCtx *types.Context, ref string) (*rod.Element, error) {
+	snapshot, err := rodCtx.LatestSnapshot()
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.LocatorInFrame(ref)
+}
+
+// resolveByName searches for an element by accessible name and optional ARIA role,
+// building a snapshot if one doesn't already exist.
+func resolveByName(rodCtx *types.Context, name, role string) (*rod.Element, error) {
 	snapshot, err := rodCtx.EnsureSnapshot()
 	if err != nil {
-		return nil, nil, ele, fmt.Errorf("%s %s: failed to build snapshot for semantic search: %w", toolName, ele, err)
+		return nil, fmt.Errorf("failed to build snapshot for semantic search: %w", err)
 	}
 
-	role := getOptionalStringArg(args, "role")
 	matches := snapshot.FindByNameRole(name, role)
 
 	if len(matches) == 0 {
 		if role != "" {
-			return nil, nil, ele, fmt.Errorf("%s %s: no element found with name %q and role %q", toolName, ele, name, role)
+			return nil, fmt.Errorf("no element found with name %q and role %q", name, role)
 		}
-		return nil, nil, ele, fmt.Errorf("%s %s: no element found with name %q", toolName, ele, name)
+		return nil, fmt.Errorf("no element found with name %q", name)
 	}
 
 	if len(matches) > 1 {
@@ -87,17 +100,13 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 		for _, m := range matches {
 			descriptions = append(descriptions, fmt.Sprintf("  ref=%s  %s", m.Ref, m.Raw))
 		}
-		return nil, nil, ele, fmt.Errorf(
-			"%s %s: %d elements match name %q — use 'ref' to disambiguate:\n%s",
-			toolName, ele, len(matches), name, strings.Join(descriptions, "\n"),
+		return nil, fmt.Errorf(
+			"%d elements match name %q — use 'ref' to disambiguate:\n%s",
+			len(matches), name, strings.Join(descriptions, "\n"),
 		)
 	}
 
-	element, err := snapshot.LocatorInFrame(matches[0].Ref)
-	if err != nil {
-		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
-	}
-	return page, element, ele, nil
+	return snapshot.LocatorInFrame(matches[0].Ref)
 }
 
 // keyMap maps string key names to input.Key constants.

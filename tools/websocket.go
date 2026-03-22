@@ -21,7 +21,7 @@ var (
 		mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("list", "frames", "clear")),
 		mcp.WithString("urlFilter", mcp.Description("Filter connections/frames by URL substring")),
 		mcp.WithString("direction", mcp.Description("Filter frames by direction"), mcp.Enum("sent", "received")),
-		mcp.WithNumber("maxFrames", mcp.Description("Maximum number of frames to return (default: 100)")),
+		mcp.WithNumber("maxFrames", mcp.Description(fmt.Sprintf("Maximum number of frames to return (default: %d)", defaultMaxWSFrames))),
 	)
 )
 
@@ -56,7 +56,7 @@ var (
 			case "frames":
 				urlFilter := getOptionalStringArg(args, "urlFilter")
 				direction := getOptionalStringArg(args, "direction")
-				maxFrames := int(getOptionalFloatArg(args, "maxFrames", 100))
+				maxFrames := int(getOptionalFloatArg(args, "maxFrames", float64(defaultMaxWSFrames)))
 
 				frames := rodCtx.WebSocketFrames(urlFilter, direction)
 				if len(frames) == 0 {
@@ -80,8 +80,8 @@ var (
 						dir = "←"
 					}
 					payload := f.PayloadData
-					if len(payload) > 200 {
-						payload = payload[:200] + "..."
+					if len(payload) > wsPayloadPreviewLen {
+						payload = payload[:wsPayloadPreviewLen] + "..."
 					}
 					sb.WriteString(fmt.Sprintf("  %s [%s] %s\n", dir, f.URL, payload))
 				}

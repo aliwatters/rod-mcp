@@ -18,7 +18,7 @@ var (
 	Scroll = mcp.NewTool(ScrollToolKey,
 		mcp.WithDescription("Scroll the page or a specific element. Supports directional scrolling, absolute positions, and scrolling to top/bottom."),
 		mcp.WithString("direction", mcp.Description("Scroll direction: up, down, left, right, top, bottom"), mcp.Enum("up", "down", "left", "right", "top", "bottom")),
-		mcp.WithNumber("amount", mcp.Description("Number of pixels to scroll (default: 500). Ignored for top/bottom.")),
+		mcp.WithNumber("amount", mcp.Description(fmt.Sprintf("Number of pixels to scroll (default: %d). Ignored for top/bottom.", defaultScrollPixels))),
 		mcp.WithNumber("x", mcp.Description("Absolute horizontal scroll position in pixels")),
 		mcp.WithNumber("y", mcp.Description("Absolute vertical scroll position in pixels")),
 		mcp.WithString("selector", mcp.Description("CSS selector of element to scroll into view")),
@@ -87,7 +87,7 @@ var (
 			if direction == "" {
 				direction = "down"
 			}
-			amount := getOptionalFloatArg(args, "amount", 500)
+			amount := getOptionalFloatArg(args, "amount", float64(defaultScrollPixels))
 
 			var script string
 			switch direction {
