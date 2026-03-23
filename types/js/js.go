@@ -8,6 +8,15 @@ var InjectedSnapShot string
 //go:embed a11y_audit.js
 var A11yAuditJS string
 
+//go:embed performance_vitals.js
+var PerformanceVitalsJS string
+
+//go:embed storage_list.js
+var StorageListJS string
+
+//go:embed wait_detached.js
+var WaitDetachedJS string
+
 const AriaSnapshot = "function(node, opts) { return snapshotEngine.ariaSnapshot(eval(node), eval(opts)); }"
 
 const QueryEleByAria = `(selector) => {

@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/types/js"
 )
 
 const (
@@ -99,13 +101,7 @@ var (
 				return mcp.NewToolResultText(fmt.Sprintf("Element %q is attached to DOM", selector)), nil
 
 			case "detached":
-				script := fmt.Sprintf(`() => new Promise((resolve) => {
-					const check = () => {
-						if (!document.querySelector(%q)) { resolve(true); return; }
-						requestAnimationFrame(check);
-					};
-					check();
-				})`, selector)
+				script := strings.ReplaceAll(js.WaitDetachedJS, "%SELECTOR%", fmt.Sprintf("%q", selector))
 				if _, err := timedPage.Eval(script); err != nil {
 					return toolErr(fmt.Sprintf("wait for %q to be detached", selector), err)
 				}

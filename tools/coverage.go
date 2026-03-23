@@ -108,84 +108,121 @@ func coverageReport(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, erro
 	var result strings.Builder
 
 	if doJS {
-		resp, err := proto.ProfilerTakePreciseCoverage{}.Call(page)
+		section, err := coverageReportJS(page)
 		if err != nil {
-			return toolErr("get JS coverage", err)
+			return nil, err
 		}
-		result.WriteString("## JavaScript Coverage\n\n")
-		if len(resp.Result) == 0 {
-			result.WriteString("No JS coverage data (is collection started?)\n\n")
-		} else {
-			var totalBytes, usedBytes int
-			for _, script := range resp.Result {
-				if script.URL == "" {
-					continue
-				}
-				scriptTotal, scriptUsed := 0, 0
-				for _, fn := range script.Functions {
-					for _, r := range fn.Ranges {
-						size := r.EndOffset - r.StartOffset
-						scriptTotal += size
-						if r.Count > 0 {
-							scriptUsed += size
-						}
-					}
-				}
-				if scriptTotal > 0 {
-					result.WriteString(formatCoverageEntry(script.URL, scriptUsed, scriptTotal))
-					totalBytes += scriptTotal
-					usedBytes += scriptUsed
-				}
-			}
-			if totalBytes > 0 {
-				result.WriteString(formatCoverageTotal("JS", usedBytes, totalBytes))
-				result.WriteString("\n")
-			}
-		}
+		result.WriteString(section)
 	}
 
 	if doCSS {
-		resp, err := proto.CSSTakeCoverageDelta{}.Call(page)
+		section, err := coverageReportCSS(page)
 		if err != nil {
-			return toolErr("get CSS coverage", err)
+			return nil, err
 		}
-		result.WriteString("## CSS Coverage\n\n")
-		if len(resp.Coverage) == 0 {
-			result.WriteString("No CSS coverage data (is collection started?)\n\n")
-		} else {
-			type sheetStats struct {
-				total int
-				used  int
-			}
-			sheets := make(map[string]*sheetStats)
-			for _, rule := range resp.Coverage {
-				id := string(rule.StyleSheetID)
-				s, ok := sheets[id]
-				if !ok {
-					s = &sheetStats{}
-					sheets[id] = s
-				}
-				size := int(rule.EndOffset - rule.StartOffset)
-				s.total += size
-				if rule.Used {
-					s.used += size
-				}
-			}
-			var totalBytes, usedBytes int
-			for id, s := range sheets {
-				if s.total > 0 {
-					result.WriteString(formatCoverageEntry("stylesheet "+id, s.used, s.total))
-					totalBytes += s.total
-					usedBytes += s.used
-				}
-			}
-			if totalBytes > 0 {
-				result.WriteString(formatCoverageTotal("CSS", usedBytes, totalBytes))
-			}
-		}
+		result.WriteString(section)
 	}
 
 	return mcp.NewToolResultText(result.String()), nil
+}
+
+// coverageReportJS collects the current JS precise-coverage snapshot and returns
+// a Markdown section summarising per-script and overall byte usage.
+func coverageReportJS(page *rod.Page) (string, error) {
+	resp, err := proto.ProfilerTakePreciseCoverage{}.Call(page)
+	if err != nil {
+		return "", fmt.Errorf("get JS coverage: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## JavaScript Coverage\n\n")
+
+	if len(resp.Result) == 0 {
+		sb.WriteString("No JS coverage data (is collection started?)\n\n")
+		return sb.String(), nil
+	}
+
+	var totalBytes, usedBytes int
+	for _, script := range resp.Result {
+		if script.URL == "" {
+			continue
+		}
+		scriptTotal, scriptUsed := summariseJSScript(script)
+		if scriptTotal > 0 {
+			sb.WriteString(formatCoverageEntry(script.URL, scriptUsed, scriptTotal))
+			totalBytes += scriptTotal
+			usedBytes += scriptUsed
+		}
+	}
+	if totalBytes > 0 {
+		sb.WriteString(formatCoverageTotal("JS", usedBytes, totalBytes))
+		sb.WriteString("\n")
+	}
+	return sb.String(), nil
+}
+
+// summariseJSScript calculates total and used byte counts for a single script
+// by iterating over its function ranges.
+func summariseJSScript(script *proto.ProfilerScriptCoverage) (total, used int) {
+	for _, fn := range script.Functions {
+		for _, r := range fn.Ranges {
+			size := r.EndOffset - r.StartOffset
+			total += size
+			if r.Count > 0 {
+				used += size
+			}
+		}
+	}
+	return total, used
+}
+
+// coverageReportCSS collects the CSS coverage delta and returns a Markdown section
+// summarising per-stylesheet and overall byte usage.
+func coverageReportCSS(page *rod.Page) (string, error) {
+	resp, err := proto.CSSTakeCoverageDelta{}.Call(page)
+	if err != nil {
+		return "", fmt.Errorf("get CSS coverage: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString("## CSS Coverage\n\n")
+
+	if len(resp.Coverage) == 0 {
+		sb.WriteString("No CSS coverage data (is collection started?)\n\n")
+		return sb.String(), nil
+	}
+
+	type sheetStats struct {
+		total int
+		used  int
+	}
+	sheets := make(map[string]*sheetStats)
+	for _, rule := range resp.Coverage {
+		id := string(rule.StyleSheetID)
+		s, ok := sheets[id]
+		if !ok {
+			s = &sheetStats{}
+			sheets[id] = s
+		}
+		size := int(rule.EndOffset - rule.StartOffset)
+		s.total += size
+		if rule.Used {
+			s.used += size
+		}
+	}
+
+	var totalBytes, usedBytes int
+	for id, s := range sheets {
+		if s.total > 0 {
+			sb.WriteString(formatCoverageEntry("stylesheet "+id, s.used, s.total))
+			totalBytes += s.total
+			usedBytes += s.used
+		}
+	}
+	if totalBytes > 0 {
+		sb.WriteString(formatCoverageTotal("CSS", usedBytes, totalBytes))
+	}
+	return sb.String(), nil
 }
 
 func coverageStop(page *rod.Page, doJS, doCSS bool) (*mcp.CallToolResult, error) {
