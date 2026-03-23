@@ -73,17 +73,11 @@ func main() {
 	runner := NewRunner(ctx, *cfg)
 	go func() {
 		c := make(chan os.Signal, 1)
-		signal.Notify(c, os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGKILL)
+		signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 		defer signal.Stop(c)
-
-		for {
-			select {
-			case <-c:
-				log.Info("Received signal, exiting...")
-				cancel()
-				return
-			}
-		}
+		<-c
+		log.Info("Received signal, exiting...")
+		cancel()
 	}()
 	runner.Run()
 
