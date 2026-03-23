@@ -3,12 +3,14 @@ package tools
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-rod/rod"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/types/js"
 )
 
 const (
@@ -116,15 +118,8 @@ func storageRemove(page *rod.Page, args map[string]interface{}, storageObj strin
 }
 
 func storageList(page *rod.Page, storageObj string) (*mcp.CallToolResult, error) {
-	r, err := page.Eval(fmt.Sprintf(`() => {
-		const s = %s;
-		const items = {};
-		for (let i = 0; i < s.length; i++) {
-			const key = s.key(i);
-			items[key] = s.getItem(key);
-		}
-		return JSON.stringify(items, null, 2);
-	}`, storageObj))
+	script := strings.ReplaceAll(js.StorageListJS, "%STORAGE_OBJ%", storageObj)
+	r, err := page.Eval(script)
 	if err != nil {
 		return toolErr("storage list", err)
 	}
