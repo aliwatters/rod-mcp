@@ -63,8 +63,8 @@ type Context struct {
 	// interceptCancel cancels the EachEvent goroutine started by interceptEnable.
 	interceptCancel func()
 	// WebSocket tracking
-	wsConnections []WebSocketConnection
-	wsConnIndex   map[string]int // requestID → index in wsConnections
+	wsConnections *RingBuffer[WebSocketConnection]
+	wsConnIndex   map[string]int // requestID → internal ring-buffer index in wsConnections
 	wsFrames      *RingBuffer[WebSocketFrame]
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
@@ -77,6 +77,7 @@ func NewContext(ctx context.Context, cfg Config) *Context {
 		mode:            cfg.Mode,
 		consoleMessages: NewRingBuffer[ConsoleMessage](maxConsoleMessages),
 		networkRequests: NewRingBuffer[NetworkRequest](maxNetworkRequests),
+		wsConnections:   NewRingBuffer[WebSocketConnection](maxWSConnections),
 		wsFrames:        NewRingBuffer[WebSocketFrame](maxWSFrames),
 	}
 }

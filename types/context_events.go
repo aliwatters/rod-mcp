@@ -13,6 +13,8 @@ const (
 	maxConsoleMessages = 10000
 	// maxNetworkRequests is the maximum number of network requests retained.
 	maxNetworkRequests = 10000
+	// maxWSConnections is the maximum number of WebSocket connections retained.
+	maxWSConnections = 1000
 	// maxWSFrames is the maximum number of WebSocket frames retained.
 	maxWSFrames = 10000
 )
@@ -101,30 +103,36 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 		if ctx.wsConnIndex == nil {
 			ctx.wsConnIndex = make(map[string]int)
 		}
-		ctx.wsConnIndex[string(e.RequestID)] = len(ctx.wsConnections)
-		ctx.wsConnections = append(ctx.wsConnections, WebSocketConnection{
+		idx := ctx.wsConnections.AddWithIndex(WebSocketConnection{
 			RequestID: string(e.RequestID),
 			URL:       e.URL,
 		})
+		ctx.wsConnIndex[string(e.RequestID)] = idx
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameSent) {
 		ctx.stateLock.Lock()
 		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].SentCount++
-			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "sent", e.Response)
+			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+				conn.SentCount++
+				ctx.appendWSFrame(conn.URL, "sent", e.Response)
+			})
 		}
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameReceived) {
 		ctx.stateLock.Lock()
 		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].ReceivedCount++
-			ctx.appendWSFrame(ctx.wsConnections[idx].URL, "received", e.Response)
+			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+				conn.ReceivedCount++
+				ctx.appendWSFrame(conn.URL, "received", e.Response)
+			})
 		}
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketClosed) {
 		ctx.stateLock.Lock()
 		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections[idx].Closed = true
+			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+				conn.Closed = true
+			})
 		}
 		ctx.stateLock.Unlock()
 	})()
@@ -216,14 +224,9 @@ func (ctx *Context) WebSocketConnections(urlFilter string) []WebSocketConnection
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
-	var result []WebSocketConnection
-	for _, conn := range ctx.wsConnections {
-		if urlFilter != "" && !strings.Contains(conn.URL, urlFilter) {
-			continue
-		}
-		result = append(result, conn)
-	}
-	return result
+	return filterSlice(ctx.wsConnections.Slice(), func(conn WebSocketConnection) bool {
+		return urlFilter == "" || strings.Contains(conn.URL, urlFilter)
+	})
 }
 
 // WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
@@ -246,7 +249,7 @@ func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFram
 func (ctx *Context) ClearWebSocketData() {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-	ctx.wsConnections = nil
+	ctx.wsConnections.Clear()
 	ctx.wsConnIndex = nil
 	ctx.wsFrames.Clear()
 }
