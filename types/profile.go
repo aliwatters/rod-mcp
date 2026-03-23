@@ -148,43 +148,46 @@ func isValidDomainPattern(d string) bool {
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("open source file %q: %w", src, err)
 	}
 	defer in.Close()
 
 	info, err := in.Stat()
 	if err != nil {
-		return err
+		return fmt.Errorf("stat source file %q: %w", src, err)
 	}
 
 	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, info.Mode())
 	if err != nil {
-		return err
+		return fmt.Errorf("create destination file %q: %w", dst, err)
 	}
 
 	_, copyErr := io.Copy(out, in)
 	// Always close; prefer the copy error if both fail.
 	closeErr := out.Close()
 	if copyErr != nil {
-		return copyErr
+		return fmt.Errorf("copy %q to %q: %w", src, dst, copyErr)
 	}
-	return closeErr
+	if closeErr != nil {
+		return fmt.Errorf("close destination file %q: %w", dst, closeErr)
+	}
+	return nil
 }
 
 // copyDir recursively copies a directory tree, skipping symlinks.
 func copyDir(src, dst string) error {
 	srcInfo, err := os.Stat(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("stat source dir %q: %w", src, err)
 	}
 
 	if err := os.MkdirAll(dst, srcInfo.Mode()); err != nil {
-		return err
+		return fmt.Errorf("create destination dir %q: %w", dst, err)
 	}
 
 	entries, err := os.ReadDir(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("read source dir %q: %w", src, err)
 	}
 
 	for _, entry := range entries {
