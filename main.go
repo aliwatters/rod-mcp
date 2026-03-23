@@ -11,6 +11,44 @@ import (
 	"github.com/aliwatters/rod-mcp/types"
 )
 
+// applyOverrides merges CLI flag values from subCfg into cfg,
+// letting explicit CLI flags take precedence over the config file.
+func applyOverrides(cfg *types.Config, subCfg *SubCfg) {
+	if subCfg.Headless {
+		cfg.Headless = true
+	}
+	if subCfg.Mode != "" {
+		cfg.Mode = subCfg.Mode
+	}
+	if subCfg.CDPEndpoint != "" {
+		cfg.CDPEndpoint = subCfg.CDPEndpoint
+	}
+	if subCfg.ChromeDebugPort != "" {
+		cfg.ChromeDebugPort = subCfg.ChromeDebugPort
+	}
+	if subCfg.UserDataDir != "" {
+		cfg.UserDataDir = subCfg.UserDataDir
+	}
+	if domains := parseCloneDomains(subCfg.CloneDomains); len(domains) > 0 {
+		cfg.CloneDomains = domains
+	}
+	if subCfg.NoClone {
+		cfg.NoClone = true
+	}
+	if subCfg.CloneAll {
+		cfg.CloneAll = true
+	}
+	if subCfg.CompactSnapshot {
+		cfg.CompactSnapshot = true
+	}
+	if subCfg.OutputDir != "" {
+		cfg.OutputDir = subCfg.OutputDir
+	}
+	if subCfg.OmitImages {
+		cfg.ImageResponses = types.ImageResponsesOmit
+	}
+}
+
 func main() {
 	subCfg, err := RunCmd()
 	if err != nil {
@@ -28,49 +66,7 @@ func main() {
 	// init logger
 	types.InitLogger(cfg.LoggerConfig)
 
-	if subCfg.Headless {
-		cfg.Headless = true
-	}
-
-	if subCfg.Mode != "" {
-		cfg.Mode = subCfg.Mode
-	}
-
-	if subCfg.CDPEndpoint != "" {
-		cfg.CDPEndpoint = subCfg.CDPEndpoint
-	}
-
-	if subCfg.ChromeDebugPort != "" {
-		cfg.ChromeDebugPort = subCfg.ChromeDebugPort
-	}
-
-	if subCfg.UserDataDir != "" {
-		cfg.UserDataDir = subCfg.UserDataDir
-	}
-
-	if domains := parseCloneDomains(subCfg.CloneDomains); len(domains) > 0 {
-		cfg.CloneDomains = domains
-	}
-
-	if subCfg.NoClone {
-		cfg.NoClone = true
-	}
-
-	if subCfg.CloneAll {
-		cfg.CloneAll = true
-	}
-
-	if subCfg.CompactSnapshot {
-		cfg.CompactSnapshot = true
-	}
-
-	if subCfg.OutputDir != "" {
-		cfg.OutputDir = subCfg.OutputDir
-	}
-
-	if subCfg.OmitImages {
-		cfg.ImageResponses = types.ImageResponsesOmit
-	}
+	applyOverrides(cfg, subCfg)
 
 	cfg.ServerVersion = Version
 
