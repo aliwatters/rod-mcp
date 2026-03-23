@@ -309,10 +309,8 @@ func TestWebSocketConnections_Empty(t *testing.T) {
 func TestWebSocketConnections_NoFilter(t *testing.T) {
 	ctx := newEventsContext()
 	ctx.stateLock.Lock()
-	ctx.wsConnections = []WebSocketConnection{
-		{RequestID: "ws1", URL: "wss://a.com/ws", Closed: false},
-		{RequestID: "ws2", URL: "wss://b.com/ws", Closed: true},
-	}
+	ctx.wsConnections.Add(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com/ws", Closed: false})
+	ctx.wsConnections.Add(WebSocketConnection{RequestID: "ws2", URL: "wss://b.com/ws", Closed: true})
 	ctx.stateLock.Unlock()
 
 	conns := ctx.WebSocketConnections("")
@@ -324,10 +322,8 @@ func TestWebSocketConnections_NoFilter(t *testing.T) {
 func TestWebSocketConnections_URLFilter(t *testing.T) {
 	ctx := newEventsContext()
 	ctx.stateLock.Lock()
-	ctx.wsConnections = []WebSocketConnection{
-		{RequestID: "ws1", URL: "wss://a.com/ws"},
-		{RequestID: "ws2", URL: "wss://b.com/ws"},
-	}
+	ctx.wsConnections.Add(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com/ws"})
+	ctx.wsConnections.Add(WebSocketConnection{RequestID: "ws2", URL: "wss://b.com/ws"})
 	ctx.stateLock.Unlock()
 
 	conns := ctx.WebSocketConnections("a.com")
@@ -425,10 +421,8 @@ func TestClearWebSocketData_ClearsAll(t *testing.T) {
 	ctx := newEventsContext()
 
 	ctx.stateLock.Lock()
-	ctx.wsConnections = []WebSocketConnection{
-		{RequestID: "ws1", URL: "wss://a.com"},
-	}
-	ctx.wsConnIndex = map[string]int{"ws1": 0}
+	idx := ctx.wsConnections.AddWithIndex(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com"})
+	ctx.wsConnIndex = map[string]int{"ws1": idx}
 	ctx.stateLock.Unlock()
 	addWSFrames(ctx, []WebSocketFrame{
 		{URL: "wss://a.com", Direction: "sent", PayloadData: "data"},
@@ -447,9 +441,9 @@ func TestClearWebSocketData_ClearsAll(t *testing.T) {
 	}
 
 	ctx.stateLock.Lock()
-	idx := ctx.wsConnIndex
+	connIndex := ctx.wsConnIndex
 	ctx.stateLock.Unlock()
-	if idx != nil {
+	if connIndex != nil {
 		t.Error("wsConnIndex should be nil after clear")
 	}
 }
