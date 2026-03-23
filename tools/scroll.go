@@ -36,90 +36,20 @@ var (
 			}
 
 			args := request.GetArguments()
-			direction := getOptionalStringArg(args, "direction")
 			selector := getOptionalStringArg(args, "selector")
 
-			// Scroll element into view
 			if selector != "" {
-				el, err := page.Element(selector)
-				if err != nil {
-					return toolErr(fmt.Sprintf("scroll to element %q", selector), err)
-				}
-				if err = el.ScrollIntoView(); err != nil {
-					return toolErr(fmt.Sprintf("scroll element %q into view", selector), err)
-				}
-				waitDOMStable(page)
-
-				pos, err := page.Eval(`() => ({ x: window.scrollX, y: window.scrollY })`)
-				if err != nil {
-					return mcp.NewToolResultText(fmt.Sprintf("Scrolled element %q into view", selector)), nil
-				}
-				return mcp.NewToolResultText(fmt.Sprintf("Scrolled element %q into view (position: %.0f, %.0f)",
-					selector, pos.Value.Get("x").Num(), pos.Value.Get("y").Num())), nil
+				return scrollToElement(page, selector)
 			}
 
-			// Absolute position scroll
 			if _, hasX := args["x"]; hasX {
-				x, err := getFloatArg(args, "x")
-				if err != nil {
-					return toolErr("scroll", err)
-				}
-				y := getOptionalFloatArg(args, "y", 0)
-				_, err = page.Eval(`(x, y) => window.scrollTo(x, y)`, x, y)
-				if err != nil {
-					return toolErr("scroll to position", err)
-				}
-				waitDOMStable(page)
-				return mcp.NewToolResultText(fmt.Sprintf("Scrolled to position (%.0f, %.0f)", x, y)), nil
+				return scrollToCoordinates(page, args)
 			}
 			if _, hasY := args["y"]; hasY {
-				y, err := getFloatArg(args, "y")
-				if err != nil {
-					return toolErr("scroll", err)
-				}
-				_, err = page.Eval(`(x, y) => window.scrollTo(x, y)`, 0, y)
-				if err != nil {
-					return toolErr("scroll to position", err)
-				}
-				waitDOMStable(page)
-				return mcp.NewToolResultText(fmt.Sprintf("Scrolled to position (0, %.0f)", y)), nil
+				return scrollToCoordinates(page, args)
 			}
 
-			// Direction-based scrolling
-			if direction == "" {
-				direction = "down"
-			}
-			amount := getOptionalFloatArg(args, "amount", float64(defaultScrollPixels))
-
-			var script string
-			switch direction {
-			case "down":
-				script = fmt.Sprintf(`() => window.scrollBy(0, %.0f)`, amount)
-			case "up":
-				script = fmt.Sprintf(`() => window.scrollBy(0, -%.0f)`, amount)
-			case "right":
-				script = fmt.Sprintf(`() => window.scrollBy(%.0f, 0)`, amount)
-			case "left":
-				script = fmt.Sprintf(`() => window.scrollBy(-%.0f, 0)`, amount)
-			case "top":
-				script = `() => window.scrollTo(0, 0)`
-			case "bottom":
-				script = `() => window.scrollTo(0, document.body.scrollHeight)`
-			default:
-				return nil, fmt.Errorf("invalid direction %q: must be up, down, left, right, top, or bottom", direction)
-			}
-
-			if _, err = page.Eval(script); err != nil {
-				return toolErr("scroll "+direction, err)
-			}
-			waitDOMStable(page)
-
-			pos, err := page.Eval(`() => ({ x: window.scrollX, y: window.scrollY })`)
-			if err != nil {
-				return mcp.NewToolResultText(fmt.Sprintf("Scrolled %s", direction)), nil
-			}
-			return mcp.NewToolResultText(fmt.Sprintf("Scrolled %s (position: %.0f, %.0f)",
-				direction, pos.Value.Get("x").Num(), pos.Value.Get("y").Num())), nil
+			return scrollByDirection(page, args)
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
