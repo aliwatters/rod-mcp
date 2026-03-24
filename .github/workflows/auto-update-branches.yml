@@ -24,3 +24,4 @@ jobs:
           update-mode: "next"
           cancel-stale-ci: "true"
           conflict-label: "needs-rebase"
+          filter: "auto-merge+label"
