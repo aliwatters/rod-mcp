@@ -38,6 +38,8 @@ var (
 
 // simplePageAction creates a handler for simple page navigation actions
 // (go back, go forward, reload) that share the same pattern.
+// A timeout is applied so the action cannot hang indefinitely (e.g. when a
+// beforeunload dialog blocks navigation before our auto-accept fires).
 func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page) error) server.ToolHandlerFunc {
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
@@ -46,7 +48,8 @@ func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page)
 		if err != nil {
 			return toolErr(name, err)
 		}
-		if err = action(page); err != nil {
+		timedPage := page.Timeout(defaultNavigationTimeout)
+		if err = action(timedPage); err != nil {
 			return toolErr(name, err)
 		}
 		waitDOMStable(page)
@@ -78,7 +81,10 @@ var (
 				log.Warnf("Failed to update headers for %s: %s", url, err)
 			}
 
-			if err = page.Navigate(url); err != nil {
+			// Apply a timeout so navigation cannot hang indefinitely (e.g. if a
+			// beforeunload dialog blocks, or the server never responds).
+			timedPage := page.Timeout(defaultNavigationTimeout)
+			if err = timedPage.Navigate(url); err != nil {
 				return toolErr("navigate to "+url, err)
 			}
 			waitDOMStable(page)
