@@ -22,6 +22,9 @@ const (
 	// defaultDialogTimeout is the max time to wait for a browser dialog to appear.
 	defaultDialogTimeout = 30 * time.Second
 
+	// defaultNavigationTimeout is the max time to wait for a page navigation to complete.
+	defaultNavigationTimeout = 30 * time.Second
+
 	// defaultWaitTimeoutMs is the default timeout for wait operations in milliseconds.
 	defaultWaitTimeoutMs = 30000.0
 
