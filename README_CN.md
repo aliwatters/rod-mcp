@@ -198,10 +198,6 @@ go build -o rod-mcp .
 - Go 1.23+
 - Chrome 或 Chromium
 
-## 归属
-
-本项目是 Go Rod Team 的 [go-rod/rod-mcp](https://github.com/go-rod/rod-mcp) 的分支。原项目为通过 Model Context Protocol 实现浏览器自动化奠定了基础。
-
 ## 许可证
 
 MIT - 详见 [LICENSE](LICENSE)
