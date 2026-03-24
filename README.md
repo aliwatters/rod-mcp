@@ -331,10 +331,6 @@ rod-mcp/
 └── assets/          # Logo images
 ```
 
-## Attribution
-
-This project is a fork of [go-rod/rod-mcp](https://github.com/go-rod/rod-mcp) by the Go Rod Team. The original project provided the foundation for browser automation via the Model Context Protocol.
-
 ## License
 
 MIT - see [LICENSE](LICENSE)
