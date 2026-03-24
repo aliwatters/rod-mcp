@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 )
@@ -51,15 +52,25 @@ type WebSocketFrame struct {
 	Opcode      int    `json:"opcode"`
 }
 
-// attachEventListeners registers goroutine-based listeners for console messages
-// and network requests on a cancelable page copy. It returns a cancel function
-// that stops all listener goroutines; callers must invoke it when the page is
-// no longer needed to avoid goroutine leaks.
+// attachEventListeners registers goroutine-based listeners for console messages,
+// network requests, and dialog auto-handling on a cancelable page copy. It
+// returns a cancel function that stops all listener goroutines; callers must
+// invoke it when the page is no longer needed to avoid goroutine leaks.
 func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 	// Create a cancelable copy of the page so that cancelling stops EachEvent.
 	cancelPage, cancelFn := page.WithCancel()
 
-	go cancelPage.EachEvent(func(e *proto.RuntimeConsoleAPICalled) {
+	go cancelPage.EachEvent(func(e *proto.PageJavascriptDialogOpening) {
+		// Auto-accept beforeunload dialogs to prevent navigation from hanging.
+		// There is no interactive user to respond, so blocking is never useful.
+		// Other dialog types (alert, confirm, prompt) are left for the
+		// rod_handle_dialog tool so callers retain explicit control.
+		if e.Type == proto.PageDialogTypeBeforeunload {
+			if err := (proto.PageHandleJavaScriptDialog{Accept: true}).Call(page); err != nil {
+				log.Warnf("auto-accept beforeunload dialog: %s", err)
+			}
+		}
+	}, func(e *proto.RuntimeConsoleAPICalled) {
 		var parts []string
 		for _, arg := range e.Args {
 			parts = append(parts, arg.Value.String())
