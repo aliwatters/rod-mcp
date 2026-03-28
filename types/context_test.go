@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // newTestContext creates a Context with a default Config suitable for unit tests.
@@ -243,6 +244,26 @@ func TestClose_NoBrowser_NoError(t *testing.T) {
 	err := ctx.Close()
 	if err != nil {
 		t.Errorf("Close with no browser: unexpected error: %v", err)
+	}
+}
+
+func TestKeepaliveInterval(t *testing.T) {
+	// Keepalive should be frequent enough to prevent the ~15min idle timeout.
+	if keepaliveInterval >= 15*time.Minute {
+		t.Errorf("keepaliveInterval = %v, should be less than 15 minutes to prevent idle timeout", keepaliveInterval)
+	}
+	// But not so frequent that it wastes resources.
+	if keepaliveInterval < 1*time.Minute {
+		t.Errorf("keepaliveInterval = %v, should be at least 1 minute", keepaliveInterval)
+	}
+}
+
+func TestStartKeepalive_NilBrowser(t *testing.T) {
+	ctx := newTestContext()
+	// Should not panic with nil browser.
+	ctx.startKeepalive()
+	if ctx.keepaliveCancel != nil {
+		t.Error("startKeepalive with nil browser should not set keepaliveCancel")
 	}
 }
 

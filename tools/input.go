@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/input"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -15,6 +17,7 @@ import (
 
 const (
 	PressKeyToolKey    = "rod_press"
+	TypeToolKey        = "rod_type"
 	FileUploadToolKey  = "rod_file_upload"
 )
 
@@ -22,6 +25,11 @@ var (
 	PressKey = mcp.NewTool(PressKeyToolKey,
 		mcp.WithDescription("Press a key on the keyboard"),
 		mcp.WithString("key", mcp.Description("Name of the key to press or a character to generate, such as `ArrowLeft` or `a`"), mcp.Required()),
+	)
+	Type = mcp.NewTool(TypeToolKey,
+		mcp.WithDescription("Type a string of text character by character with realistic keyboard events. Better than rod_fill for React controlled inputs. Use this instead of multiple rod_press calls."),
+		mcp.WithString("text", mcp.Description("The text string to type"), mcp.Required()),
+		mcp.WithNumber("delay", mcp.Description("Milliseconds between keystrokes (default: 50). Use higher values for React apps that need time to process state updates.")),
 	)
 	FileUpload = mcp.NewTool(FileUploadToolKey,
 		mcp.WithDescription("Upload file(s) to a file input element"),
@@ -53,6 +61,37 @@ var (
 			}
 			waitDOMStable(page)
 			return mcp.NewToolResultText(fmt.Sprintf("Press key %s successfully", keyStr)), nil
+		}
+		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
+	}
+
+	TypeHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
+		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			// Typing modifies DOM; invalidate so Execute rebuilds the snapshot.
+			rodCtx.InvalidateSnapshot()
+			page, err := rodCtx.ControlledPage()
+			if err != nil {
+				return toolErr("type text", err)
+			}
+			text, err := getStringArg(request.GetArguments(), "text")
+			if err != nil {
+				return toolErr("type text", err)
+			}
+			delayMs := getOptionalFloatArg(request.GetArguments(), "delay", 50)
+			delay := time.Duration(delayMs) * time.Millisecond
+
+			// Type each character with a delay between keystrokes.
+			for _, ch := range text {
+				if err := page.Keyboard.Press(input.Key(ch)); err != nil {
+					return toolErr(fmt.Sprintf("type character %q", string(ch)), err)
+				}
+				if delay > 0 {
+					time.Sleep(delay)
+				}
+			}
+
+			waitDOMStable(page)
+			return mcp.NewToolResultText(fmt.Sprintf("Typed %d characters successfully", len([]rune(text)))), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}

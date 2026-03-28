@@ -68,6 +68,8 @@ type Context struct {
 	wsFrames      *RingBuffer[WebSocketFrame]
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
+	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
+	keepaliveCancel func()
 }
 
 func NewContext(ctx context.Context, cfg Config) *Context {
@@ -129,6 +131,7 @@ func (ctx *Context) initLocked() error {
 		if err != nil {
 			return err
 		}
+		ctx.startKeepalive()
 		ctx.page, err = ctx.createPage()
 		if err != nil {
 			return err
@@ -269,6 +272,12 @@ func (ctx *Context) closePage() error {
 }
 
 func (ctx *Context) closeBrowser() error {
+	// Stop the keepalive goroutine before closing the browser.
+	if ctx.keepaliveCancel != nil {
+		ctx.keepaliveCancel()
+		ctx.keepaliveCancel = nil
+	}
+
 	err := ctx.closePage()
 	if err != nil {
 		return err
@@ -284,6 +293,41 @@ func (ctx *Context) closeBrowser() error {
 	}
 	ctx.browser = nil
 	return nil
+}
+
+// keepaliveInterval is how often the CDP keepalive ping is sent.
+// Chrome's DevTools protocol WebSocket has no built-in keepalive; idle
+// connections can be dropped by the OS or intermediate proxies after ~15 min.
+const keepaliveInterval = 5 * time.Minute
+
+// startKeepalive launches a background goroutine that periodically sends a
+// lightweight CDP call (Browser.getVersion) to prevent the WebSocket from
+// going idle and being killed. Must be called with stateLock held (or before
+// concurrent access begins). The goroutine stops when keepaliveCancel is called.
+func (ctx *Context) startKeepalive() {
+	if ctx.browser == nil {
+		return
+	}
+	stopCtx, cancel := context.WithCancel(ctx.stdContext)
+	ctx.keepaliveCancel = cancel
+
+	browser := ctx.browser
+	go func() {
+		ticker := time.NewTicker(keepaliveInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stopCtx.Done():
+				return
+			case <-ticker.C:
+				// Send a cheap CDP call to keep the WebSocket alive.
+				_, err := proto.BrowserGetVersion{}.Call(browser)
+				if err != nil {
+					log.Debugf("CDP keepalive ping failed: %s", err)
+				}
+			}
+		}
+	}()
 }
 
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
