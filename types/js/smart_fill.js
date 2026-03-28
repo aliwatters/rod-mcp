@@ -1,8 +1,9 @@
 // smart_fill.js — React-aware fill strategy.
-// Returns a JSON object: { "method": "<method used>", "value": "<final value>" }
-// Accepts (element, value) via rod's Eval binding.
-(function(el, value) {
+// Returns a JSON stringified object: { "method": "<method used>", "value": "<final value>", "react": <boolean>, "success": <boolean> }
+// Accepts (value) via rod's Eval binding; the element is bound as `this`.
+(function(value) {
     "use strict";
+    var el = this;
 
     // Helper: check if element is a React controlled input.
     function isReactControlled(el) {
@@ -24,7 +25,7 @@
 
     // Helper: scroll into view and focus.
     function prepareElement(el) {
-        el.scrollIntoView({ block: "center", behavior: "instant" });
+        el.scrollIntoView({ block: "center" });
         el.focus();
     }
 

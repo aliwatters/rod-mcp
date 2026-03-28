@@ -61,7 +61,16 @@ func smartFillElement(element *rod.Element, value string) (*smartFillResult, err
 		if inputErr := element.Input(value); inputErr != nil {
 			return nil, fmt.Errorf("smart fill failed and basic input also failed: %w", inputErr)
 		}
-		return &smartFillResult{Method: "basic_fallback", Value: value, Success: true}, nil
+		// Verify the final value after the basic Input attempt so we don't
+		// incorrectly report success when the field is React-controlled or otherwise
+		// ignores direct input.
+		prop, propErr := element.Property("value")
+		if propErr != nil {
+			log.Warnf("Failed to read element value after basic Input fallback: %s", propErr)
+			return &smartFillResult{Method: "basic_fallback", Value: value, Success: false}, nil
+		}
+		finalValue := prop.Str()
+		return &smartFillResult{Method: "basic_fallback", Value: finalValue, Success: finalValue == value}, nil
 	}
 
 	var result smartFillResult
@@ -107,11 +116,12 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		results := make([]fieldResult, 0, len(fieldsSlice))
 		successCount := 0
 
-		for _, f := range fieldsSlice {
+		for i, f := range fieldsSlice {
 			fieldMap, ok := f.(map[string]interface{})
 			if !ok {
 				results = append(results, fieldResult{
-					Error: "invalid field entry: expected object with 'selector' and 'value'",
+					Selector: fmt.Sprintf("fields[%d]", i),
+					Error:    "invalid field entry: expected object with 'selector' and 'value'",
 				})
 				continue
 			}
