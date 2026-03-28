@@ -78,7 +78,13 @@ var (
 				return toolErr("type text", err)
 			}
 			delayMs := getOptionalFloatArg(request.GetArguments(), "delay", 50)
-			delay := time.Duration(delayMs) * time.Millisecond
+			// Clamp delay to a reasonable range (0-5000ms).
+			if delayMs < 0 {
+				delayMs = 0
+			} else if delayMs > 5000 {
+				delayMs = 5000
+			}
+			delay := time.Duration(delayMs * float64(time.Millisecond))
 
 			// Type each character with a delay between keystrokes.
 			for _, ch := range text {
@@ -86,7 +92,12 @@ var (
 					return toolErr(fmt.Sprintf("type character %q", string(ch)), err)
 				}
 				if delay > 0 {
-					time.Sleep(delay)
+					select {
+					case <-ctx.Done():
+						return nil, ctx.Err()
+					case <-time.After(delay):
+						// proceed to next character
+					}
 				}
 			}
 

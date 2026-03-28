@@ -311,7 +311,10 @@ func (ctx *Context) startKeepalive() {
 	stopCtx, cancel := context.WithCancel(ctx.stdContext)
 	ctx.keepaliveCancel = cancel
 
-	browser := ctx.browser
+	// Use a browser handle bound to stopCtx so CDP calls are interrupted
+	// when keepaliveCancel is called, preventing goroutine leaks on stalled
+	// WebSocket connections.
+	browser := ctx.browser.Context(stopCtx)
 	go func() {
 		ticker := time.NewTicker(keepaliveInterval)
 		defer ticker.Stop()
@@ -321,7 +324,11 @@ func (ctx *Context) startKeepalive() {
 				return
 			case <-ticker.C:
 				// Send a cheap CDP call to keep the WebSocket alive.
-				_, err := proto.BrowserGetVersion{}.Call(browser)
+				// Uses a per-ping timeout so a stalled connection doesn't
+				// block the goroutine until the next tick.
+				pingCtx, pingCancel := context.WithTimeout(stopCtx, 10*time.Second)
+				_, err := proto.BrowserGetVersion{}.Call(browser.Context(pingCtx))
+				pingCancel()
 				if err != nil {
 					log.Debugf("CDP keepalive ping failed: %s", err)
 				}
