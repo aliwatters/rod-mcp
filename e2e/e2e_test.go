@@ -506,7 +506,7 @@ func TestE2E_FormInteraction(t *testing.T) {
 			"value":   "tomsmith",
 			"submit":  false,
 		})
-		assertContains(t, result, "Fill out element")
+		assertContains(t, result, "Fill element")
 	})
 
 	t.Run("form_submit", func(t *testing.T) {
