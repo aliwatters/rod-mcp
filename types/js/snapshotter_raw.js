@@ -1095,8 +1095,14 @@ class SnapshotEngine {
                 return;
 
             const element = node;
-            if (roleUtils.isElementHiddenForAria(element))
+            try {
+                if (roleUtils.isElementHiddenForAria(element))
+                    return;
+            } catch (e) {
+                // Skip elements that cause errors (e.g. React virtual DOM nodes
+                // where getComputedStyle or property access fails).
                 return;
+            }
 
             const ariaChildren = [];
             if (element.hasAttribute('aria-owns')) {
