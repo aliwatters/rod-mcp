@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/input"
 	"github.com/go-rod/rod/lib/proto"
@@ -29,34 +28,38 @@ var (
 	)
 
 	Click = mcp.NewTool(ClickToolKey,
-		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot) OR by accessible name/role for semantic targeting."),
+		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot), CSS selector, or accessible name/role. Priority: ref > selector > name."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
-		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match). Used for semantic targeting without a prior snapshot.")),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
+		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#submit-btn', '.my-class', 'input[name=email]').")),
+		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting (e.g. button, link, textbox). Optional, used to disambiguate.")),
 	)
 
 	Hover = mcp.NewTool(HoverToolKey,
-		mcp.WithDescription("Hover over an element to trigger CSS :hover states, tooltips, or dropdown menus. Target by ref OR name/role."),
+		mcp.WithDescription("Hover over an element to trigger CSS :hover states, tooltips, or dropdown menus. Target by ref, CSS selector, or name/role. Priority: ref > selector > name."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
+		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#menu-trigger', '.dropdown').")),
 		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 	)
 
 	Fill = mcp.NewTool(FillToolKey,
-		mcp.WithDescription("Type text into editable element. Target by ref OR name/role."),
+		mcp.WithDescription("Type text into editable element. Target by ref, CSS selector, or name/role. Priority: ref > selector > name. Automatically detects React controlled inputs and uses the appropriate fill strategy."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("value", mcp.Description("Text to type into the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
+		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#email', 'input[name=username]').")),
 		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 		mcp.WithBoolean("submit", mcp.Description("Whether to submit entered text (press Enter after)"), mcp.Required()),
 	)
 	Selector = mcp.NewTool(SelectorToolKey,
-		mcp.WithDescription("Select an option in a dropdown. Target by ref OR name/role."),
+		mcp.WithDescription("Select an option in a dropdown. Target by ref, CSS selector, or name/role. Priority: ref > selector > name."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
-		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot. Required if name is not provided.")),
+		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
+		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#country-select', 'select[name=state]').")),
 		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting.")),
 		mcp.WithArray("values", mcp.Description("Array of values to select in the dropdown. This can be a single value or multiple values."), mcp.Items(map[string]interface{}{"type": "string"}), mcp.Required()),
@@ -124,15 +127,12 @@ var (
 			if err != nil {
 				return toolErr("fill element "+ele, err)
 			}
-			// Clear existing value by selecting all text first, then input new value
-			// This ensures password fields and React-controlled inputs work correctly
-			if err = element.SelectAllText(); err != nil {
-				log.Warnf("Failed to select all text in element %s (may be empty): %s", ele, err)
-				// Continue anyway - field may be empty or select may not be supported
-			}
-			if err = element.Input(value); err != nil {
+
+			result, err := smartFillElement(element, value)
+			if err != nil {
 				return toolErr("fill element "+ele, err)
 			}
+
 			if submit, ok := request.GetArguments()["submit"].(bool); ok && submit {
 				if err = element.Page().Keyboard.Press(input.Enter); err != nil {
 					return toolErr("submit element "+ele, err)
@@ -140,7 +140,11 @@ var (
 			}
 
 			waitDOMStable(page)
-			return mcp.NewToolResultText(fmt.Sprintf("Fill out element %s successfully", ele)), nil
+			msg := fmt.Sprintf("Fill element %s: method=%s, success=%v", ele, result.Method, result.Success)
+			if !result.Success {
+				msg += fmt.Sprintf(" (final value: %q)", result.Value)
+			}
+			return mcp.NewToolResultText(msg), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}

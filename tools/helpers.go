@@ -34,8 +34,9 @@ func waitDOMStable(page *rod.Page) {
 }
 
 // resolveSnapshotElement resolves a snapshot element reference from an MCP request.
-// Supports two targeting modes:
+// Supports three targeting modes (in priority order):
 //   - ref-based: uses the exact ref from a prior snapshot (fast, requires rod_snapshot first)
+//   - selector-based: uses a CSS selector to find the element directly in the DOM
 //   - name-based: searches by accessible name/role, building a snapshot if needed (semantic targeting)
 //
 // Returns the page, resolved element, and the human-readable element description.
@@ -50,15 +51,18 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 	}
 
 	ref := getOptionalStringArg(args, "ref")
+	selector := getOptionalStringArg(args, "selector")
 	name := getOptionalStringArg(args, "name")
 
-	if ref == "" && name == "" {
-		return nil, nil, ele, fmt.Errorf("%s %s: either 'ref' or 'name' must be provided", toolName, ele)
+	if ref == "" && selector == "" && name == "" {
+		return nil, nil, ele, fmt.Errorf("%s %s: one of 'ref', 'selector', or 'name' must be provided", toolName, ele)
 	}
 
 	var element *rod.Element
 	if ref != "" {
 		element, err = resolveByRef(rodCtx, ref)
+	} else if selector != "" {
+		element, err = resolveBySelector(page, selector)
 	} else {
 		role := getOptionalStringArg(args, "role")
 		element, err = resolveByName(rodCtx, name, role)
@@ -67,6 +71,15 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 		return nil, nil, ele, fmt.Errorf("%s %s: %w", toolName, ele, err)
 	}
 	return page, element, ele, nil
+}
+
+// resolveBySelector locates an element using a CSS selector.
+func resolveBySelector(page *rod.Page, selector string) (*rod.Element, error) {
+	element, err := page.Element(selector)
+	if err != nil {
+		return nil, fmt.Errorf("no element found for CSS selector %q: %w", selector, err)
+	}
+	return element, nil
 }
 
 // resolveByRef locates an element using an exact snapshot ref (e.g. "e42" or "f1e7").

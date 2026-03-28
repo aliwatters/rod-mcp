@@ -1,0 +1,73 @@
+package tools
+
+import "testing"
+
+func TestFillFormToolDefinition(t *testing.T) {
+	if FillForm.Name != FillFormToolKey {
+		t.Errorf("FillForm tool name = %q, want %q", FillForm.Name, FillFormToolKey)
+	}
+
+	props := FillForm.InputSchema.Properties
+	if props == nil {
+		t.Fatal("FillForm tool has no properties")
+	}
+
+	// Verify fields parameter exists
+	if _, ok := props["fields"]; !ok {
+		t.Error("FillForm tool missing 'fields' property")
+	}
+
+	// Verify fields is required
+	found := false
+	for _, r := range FillForm.InputSchema.Required {
+		if r == "fields" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("FillForm tool 'fields' parameter should be required")
+	}
+}
+
+func TestFillFormToolRegistered(t *testing.T) {
+	// Verify FillForm is in CommonTools
+	found := false
+	for _, tool := range CommonTools {
+		if tool.Name == FillFormToolKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("FillForm tool not found in CommonTools")
+	}
+
+	// Verify handler is registered
+	if _, ok := CommonToolHandlers[FillFormToolKey]; !ok {
+		t.Error("FillForm handler not found in CommonToolHandlers")
+	}
+}
+
+func TestSmartFillResultType(t *testing.T) {
+	// Verify the smartFillResult struct fields exist and are typed correctly
+	r := smartFillResult{
+		Method:  "standard",
+		Value:   "test",
+		React:   false,
+		Success: true,
+	}
+
+	if r.Method != "standard" {
+		t.Errorf("Method = %q, want %q", r.Method, "standard")
+	}
+	if r.Value != "test" {
+		t.Errorf("Value = %q, want %q", r.Value, "test")
+	}
+	if r.React != false {
+		t.Error("React should be false")
+	}
+	if r.Success != true {
+		t.Error("Success should be true")
+	}
+}
