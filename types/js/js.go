@@ -17,6 +17,9 @@ var StorageListJS string
 //go:embed wait_detached.js
 var WaitDetachedJS string
 
+//go:embed smart_fill.js
+var SmartFillJS string
+
 const AriaSnapshot = "function(node, opts) { return snapshotEngine.ariaSnapshot(eval(node), eval(opts)); }"
 
 const QueryEleByAria = `(selector) => {
