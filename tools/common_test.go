@@ -181,6 +181,94 @@ func TestScreenshotToolHasNoUnusedParams(t *testing.T) {
 	}
 }
 
+func TestTypeToolDefinition(t *testing.T) {
+	if Type.Name != TypeToolKey {
+		t.Errorf("Type tool name = %q, want %q", Type.Name, TypeToolKey)
+	}
+
+	props := Type.InputSchema.Properties
+	if props == nil {
+		t.Fatal("Type tool has no properties")
+	}
+	if _, ok := props["text"]; !ok {
+		t.Error("Type tool missing 'text' property")
+	}
+	if _, ok := props["delay"]; !ok {
+		t.Error("Type tool missing 'delay' property")
+	}
+
+	// Verify "text" is required
+	found := false
+	for _, r := range Type.InputSchema.Required {
+		if r == "text" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Type tool 'text' parameter should be required")
+	}
+}
+
+func TestTypeToolRegistered(t *testing.T) {
+	found := false
+	for _, tool := range CommonTools {
+		if tool.Name == TypeToolKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Type tool not found in CommonTools")
+	}
+
+	if _, ok := CommonToolHandlers[TypeToolKey]; !ok {
+		t.Error("TypeHandler not found in CommonToolHandlers")
+	}
+}
+
+func TestTypeToolInTextTools(t *testing.T) {
+	found := false
+	for _, tool := range TextTools {
+		if tool.Name == TypeToolKey {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Type tool not found in TextTools")
+	}
+
+	if _, ok := TextToolHandlers[TypeToolKey]; !ok {
+		t.Error("TypeHandler not found in TextToolHandlers")
+	}
+}
+
+func TestEvaluateToolDefinition(t *testing.T) {
+	if Evaluate.Name != EvaluateToolKey {
+		t.Errorf("Evaluate tool name = %q, want %q", Evaluate.Name, EvaluateToolKey)
+	}
+
+	props := Evaluate.InputSchema.Properties
+	if props == nil {
+		t.Fatal("Evaluate tool has no properties")
+	}
+	if _, ok := props["script"]; !ok {
+		t.Error("Evaluate tool missing 'script' property")
+	}
+
+	found := false
+	for _, r := range Evaluate.InputSchema.Required {
+		if r == "script" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Evaluate tool 'script' parameter should be required")
+	}
+}
+
 func TestNavigationUsesToolKey(t *testing.T) {
 	if Navigation.Name != NavigationToolKey {
 		t.Errorf("Navigation tool name = %q, want %q (should use NavigationToolKey constant)", Navigation.Name, NavigationToolKey)

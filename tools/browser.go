@@ -76,7 +76,44 @@ var (
 			if err != nil {
 				return toolErr("evaluate code", err)
 			}
-			return mcp.NewToolResultText(fmt.Sprintf("Evaluate code successfully with result: %s", r.Result.Value.String())), nil
+			// Check for JavaScript exceptions first.
+			if r.ExceptionDetails != nil {
+				exMsg := r.ExceptionDetails.Text
+				if r.ExceptionDetails.Exception != nil && r.ExceptionDetails.Exception.Description != "" {
+					exMsg = r.ExceptionDetails.Exception.Description
+				}
+				return toolErr("evaluate code", fmt.Errorf("JavaScript error: %s", exMsg))
+			}
+			// Format the result based on its type to avoid returning "<nil>" for
+			// string values. gson.JSON.String() returns "<nil>" when the underlying
+			// value is nil, and .Str() returns the raw string (unquoted) but returns
+			// "" for non-strings. We treat "undefined" explicitly, return unquoted
+			// strings via .Str(), and use JSON("","") for other types so numbers/bools
+			// are JSON-serialized and null becomes "null".
+			result := r.Result
+			var resultStr string
+			// Handle special unserializable values (NaN, Infinity, -0) first.
+			if result.UnserializableValue != "" {
+				resultStr = string(result.UnserializableValue)
+			} else {
+				switch result.Type {
+				case "undefined":
+					resultStr = "undefined"
+				case "string":
+					resultStr = result.Value.Str()
+				default:
+					if result.Value.Nil() {
+						if result.Description != "" {
+							resultStr = result.Description
+						} else {
+							resultStr = "null"
+						}
+					} else {
+						resultStr = result.Value.JSON("", "")
+					}
+				}
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Evaluate code successfully with result: %s", resultStr)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
