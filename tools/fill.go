@@ -118,6 +118,7 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 
 		results := make([]fieldResult, 0, len(fieldsSlice))
 		successCount := 0
+		var lastFilledElement *rod.Element
 
 		for i, f := range fieldsSlice {
 			fieldMap, ok := f.(map[string]interface{})
@@ -169,6 +170,7 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 			}
 			if fillResult.Success {
 				successCount++
+				lastFilledElement = element
 			}
 			results = append(results, fr)
 		}
@@ -182,7 +184,11 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		if submitArg != "" {
 			if submitArg == "true" {
 				// Press Enter in the last filled field (native form submission).
-				if err := page.Keyboard.Press(input.Enter); err != nil {
+				if lastFilledElement == nil {
+					submitErr = "submit (Enter) skipped: no field was successfully filled"
+				} else if err := lastFilledElement.Focus(); err != nil {
+					submitErr = fmt.Sprintf("submit (Enter) failed: could not focus last filled field: %s", err)
+				} else if err := page.Keyboard.Press(input.Enter); err != nil {
 					submitErr = fmt.Sprintf("submit (Enter) failed: %s", err)
 				} else {
 					submitted = true
