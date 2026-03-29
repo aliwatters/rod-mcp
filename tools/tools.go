@@ -59,6 +59,7 @@ var (
 		PageInfo,
 		PageStatus,
 		AssertElement,
+		FrameList,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -99,6 +100,7 @@ var (
 		PageInfoToolKey:        PageInfoHandler,
 		PageStatusToolKey:      PageStatusHandler,
 		AssertElementToolKey:   AssertElementHandler,
+		FrameListToolKey:       FrameListHandler,
 	}
 )
 
