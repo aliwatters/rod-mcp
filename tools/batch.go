@@ -60,9 +60,6 @@ var (
 				return toolErr("batch", fmt.Errorf("actions must be a non-empty array"))
 			}
 
-			// Invalidate snapshot once at the start
-			rodCtx.InvalidateSnapshot()
-
 			type actionResult struct {
 				Tool    string `json:"tool"`
 				Success bool   `json:"success"`
