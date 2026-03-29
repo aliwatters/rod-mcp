@@ -220,3 +220,26 @@ func parseKey(keyStr string) (input.Key, error) {
 
 	return 0, fmt.Errorf("unknown key: %s", keyStr)
 }
+
+// modifierMap maps lowercase modifier names to input.Key constants.
+var modifierMap = map[string]input.Key{
+	"control": input.ControlLeft,
+	"ctrl":    input.ControlLeft,
+	"shift":   input.ShiftLeft,
+	"alt":     input.AltLeft,
+	"meta":    input.MetaLeft,
+	"command": input.MetaLeft,
+}
+
+// parseModifier converts a modifier string to an input.Key.
+func parseModifier(mod string) (input.Key, error) {
+	if key, ok := modifierMap[strings.ToLower(mod)]; ok {
+		return key, nil
+	}
+	return 0, fmt.Errorf("unknown modifier %q: must be control, shift, alt, or meta", mod)
+}
+
+// joinModifiers joins modifier names with "+" for display.
+func joinModifiers(mods []string) string {
+	return strings.Join(mods, "+")
+}
