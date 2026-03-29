@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -24,7 +26,7 @@ const (
 
 var (
 	Download = mcp.NewTool(DownloadToolKey,
-		mcp.WithDescription("Wait for and capture a file download. Call this BEFORE triggering the download action (click, navigate). Returns filename, size, and saved path."),
+		mcp.WithDescription("Click a trigger element and capture the resulting file download. Sets up download interception, clicks the element, waits for completion. Returns filename, size, and saved path."),
 		mcp.WithString("trigger_selector", mcp.Description("CSS selector of the element to click to trigger the download")),
 		mcp.WithString("trigger_ref", mcp.Description("Snapshot ref of the element to click to trigger the download")),
 		mcp.WithNumber("timeout", mcp.Description("Max wait time in milliseconds (default: 30000)")),
@@ -114,13 +116,17 @@ var (
 			// The file is saved as the GUID in the download directory
 			downloadedPath := filepath.Join(outDir, result.guid)
 
-			// Rename to the suggested filename if available
+			// Rename to the suggested filename if available (sanitized to prevent path traversal)
 			finalPath := downloadedPath
 			if result.filename != "" {
-				finalPath = filepath.Join(outDir, result.filename)
-				if renameErr := os.Rename(downloadedPath, finalPath); renameErr != nil {
-					// If rename fails (e.g. file already exists), keep the GUID name
-					finalPath = downloadedPath
+				safeName := filepath.Base(result.filename)
+				candidate := filepath.Clean(filepath.Join(outDir, safeName))
+				if !strings.HasPrefix(candidate, filepath.Clean(outDir)+string(os.PathSeparator)) {
+					log.Warnf("download: filename %q resolved outside output dir, using GUID", result.filename)
+				} else if renameErr := os.Rename(downloadedPath, candidate); renameErr != nil {
+					log.Warnf("download: rename to %q failed (keeping GUID name): %s", safeName, renameErr)
+				} else {
+					finalPath = candidate
 				}
 			}
 
