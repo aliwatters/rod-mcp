@@ -87,8 +87,6 @@ func smartFillElement(element *rod.Element, value string) (*smartFillResult, err
 
 var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		rodCtx.InvalidateSnapshot()
-
 		page, err := rodCtx.ControlledPage()
 		if err != nil {
 			return toolErr("fill form", err)

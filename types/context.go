@@ -169,9 +169,14 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 		if handlerCallOpts.WithSnapshot {
-			// Use EnsureSnapshot logic: only rebuild if the snapshot was invalidated
-			// (nil) by the handler. This avoids redundant rebuilds when the DOM was
-			// not modified (e.g. consecutive read-only tool calls reuse the cache).
+			// Invalidate the snapshot after DOM-mutating handlers so stale
+			// refs are never reused.  Handlers are free to read the
+			// previous snapshot for ref-based element resolution during
+			// their execution because invalidation happens here, after
+			// they return.  Read-only handlers (WithSnapshot: false) do
+			// NOT invalidate, preserving the cached snapshot for
+			// subsequent ref-based tool calls.
+			ctx.InvalidateSnapshot()
 			snap, snapErr := ctx.EnsureSnapshot()
 			var snapshotText string
 			if snapErr != nil {

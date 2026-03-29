@@ -83,8 +83,6 @@ var (
 
 	ClickHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Invalidate snapshot before acting so Execute rebuilds a fresh one after.
-			rodCtx.InvalidateSnapshot()
 			args := request.GetArguments()
 			page, element, ele, err := resolveSnapshotElement(rodCtx, args, "click element")
 			if err != nil {
@@ -139,8 +137,6 @@ var (
 
 	HoverHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Invalidate snapshot before acting so Execute rebuilds a fresh one after.
-			rodCtx.InvalidateSnapshot()
 			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "hover element")
 			if err != nil {
 				return toolErr("hover element", err)
@@ -157,8 +153,6 @@ var (
 
 	FillHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Invalidate snapshot before acting so Execute rebuilds a fresh one after.
-			rodCtx.InvalidateSnapshot()
 			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "fill element")
 			if err != nil {
 				return toolErr("fill element", err)
@@ -192,8 +186,6 @@ var (
 
 	SelectorHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Invalidate snapshot before acting so Execute rebuilds a fresh one after.
-			rodCtx.InvalidateSnapshot()
 			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "select option in element")
 			if err != nil {
 				return toolErr("select option", err)

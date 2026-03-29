@@ -23,6 +23,24 @@
         return el.value !== undefined ? el.value : el.textContent;
     }
 
+    // Helper: trigger React's onChange via internal __reactProps$.
+    // This ensures React's state is synchronized with the DOM value
+    // even when the fill method (clipboard, standard) doesn't fully
+    // propagate through React's synthetic event system.
+    function triggerReactOnChange(el) {
+        var keys = Object.keys(el);
+        for (var i = 0; i < keys.length; i++) {
+            if (keys[i].indexOf("__reactProps$") === 0) {
+                var props = el[keys[i]];
+                if (props && typeof props.onChange === "function") {
+                    props.onChange({ target: el, currentTarget: el });
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     // Helper: scroll into view and focus.
     function prepareElement(el) {
         el.scrollIntoView({ block: "center" });
@@ -126,6 +144,10 @@
         } else if (tryStandardInput(el, value)) {
             method = "react_standard_fallback";
         }
+        // Always trigger React's onChange to synchronize internal state
+        // with the DOM value.  Some fill methods update the DOM but
+        // don't fully propagate through React's synthetic event system.
+        triggerReactOnChange(el);
     }
 
     var finalValue = getValue(el);
