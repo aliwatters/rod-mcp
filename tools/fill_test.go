@@ -17,6 +17,11 @@ func TestFillFormToolDefinition(t *testing.T) {
 		t.Error("FillForm tool missing 'fields' property")
 	}
 
+	// Verify submit parameter exists
+	if _, ok := props["submit"]; !ok {
+		t.Error("FillForm tool missing 'submit' property")
+	}
+
 	// Verify fields is required
 	found := false
 	for _, r := range FillForm.InputSchema.Required {
@@ -27,6 +32,13 @@ func TestFillFormToolDefinition(t *testing.T) {
 	}
 	if !found {
 		t.Error("FillForm tool 'fields' parameter should be required")
+	}
+
+	// Verify submit is NOT required (optional)
+	for _, r := range FillForm.InputSchema.Required {
+		if r == "submit" {
+			t.Error("FillForm tool 'submit' parameter should not be required")
+		}
 	}
 }
 
