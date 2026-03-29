@@ -28,7 +28,7 @@ var (
 	)
 
 	Click = mcp.NewTool(ClickToolKey,
-		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot), CSS selector, or accessible name/role. Priority: ref > selector > name. Supports right-click and double-click."),
+		mcp.WithDescription("Perform click or tap on a web page. Target element by ref (from snapshot), CSS selector, or accessible name/role. Priority: ref > selector > name. Supports right-click, double-click, and touch tap."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
 		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#submit-btn', '.my-class', 'input[name=email]').")),
@@ -36,6 +36,7 @@ var (
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting (e.g. button, link, textbox). Optional, used to disambiguate.")),
 		mcp.WithString("button", mcp.Description("Mouse button: left (default), right, or middle")),
 		mcp.WithNumber("click_count", mcp.Description("Number of clicks: 1 (default) or 2 for double-click")),
+		mcp.WithBoolean("tap", mcp.Description("Use touch tap instead of mouse click (for mobile emulation)")),
 	)
 
 	Hover = mcp.NewTool(HoverToolKey,
@@ -88,6 +89,16 @@ var (
 			page, element, ele, err := resolveSnapshotElement(rodCtx, args, "click element")
 			if err != nil {
 				return toolErr("click element", err)
+			}
+
+			useTap := getOptionalBoolArg(args, "tap", false)
+
+			if useTap {
+				if err = element.Tap(); err != nil {
+					return toolErr("tap element "+ele, err)
+				}
+				waitDOMStable(page)
+				return mcp.NewToolResultText(fmt.Sprintf("Tap element %s successfully", ele)), nil
 			}
 
 			// Determine mouse button
