@@ -64,6 +64,8 @@ var (
 		Race,
 		Geolocation,
 		BasicAuth,
+		Batch,
+		CompareScreenshots,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -107,8 +109,10 @@ var (
 		FrameListToolKey:       FrameListHandler,
 		DownloadToolKey:        DownloadHandler,
 		RaceToolKey:            RaceHandler,
-		GeolocationToolKey:     GeolocationHandler,
-		BasicAuthToolKey:       BasicAuthHandler,
+		GeolocationToolKey:          GeolocationHandler,
+		BasicAuthToolKey:            BasicAuthHandler,
+		BatchToolKey:                BatchHandler,
+		CompareScreenshotsToolKey:   CompareScreenshotsHandler,
 	}
 )
 
