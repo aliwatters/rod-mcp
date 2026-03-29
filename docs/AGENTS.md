@@ -76,21 +76,20 @@ var MyTool = mcp.NewTool("rod_my_tool",
 
 var MyToolHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
     handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-        // 1. Invalidate snapshot if this tool mutates the DOM
-        rodCtx.InvalidateSnapshot()
-
-        // 2. Get the controlled page
+        // 1. Get the controlled page
         page, err := rodCtx.ControlledPage()
         if err != nil {
             return toolErr("my tool", err)
         }
 
-        // 3. Do work...
+        // 2. Do work (the previous snapshot is still available for ref resolution)...
 
-        // 4. Return result
+        // 3. Return result
         return mcp.NewToolResultText("result"), nil
     }
-    // WithSnapshot: true rebuilds and appends ARIA snapshot after execution
+    // Execute invalidates the snapshot after the handler returns and, when
+    // WithSnapshot: true, rebuilds and appends a fresh ARIA snapshot.
+    // Do NOT call InvalidateSnapshot() inside handlers — Execute handles it.
     return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 }
 ```
@@ -102,7 +101,7 @@ var MyToolHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 
 ### Snapshot Lifecycle
 
-DOM-mutating tools must call `rodCtx.InvalidateSnapshot()` at the start. The `Execute()` wrapper with `WithSnapshot: true` rebuilds and appends a fresh ARIA snapshot after the handler completes. This enables ref-based element targeting in subsequent calls.
+The `Execute()` wrapper automatically invalidates the snapshot after every handler returns, then rebuilds and appends a fresh ARIA snapshot when `WithSnapshot: true`. Handlers must **not** call `InvalidateSnapshot()` themselves — the previous snapshot remains available during handler execution for ref-based element resolution.
 
 ### Element Resolution
 
@@ -178,7 +177,7 @@ docs: description of documentation changes
 ## Common Mistakes
 
 1. **Passing element as JS function parameter** — rod's `Eval()` binds the element as `this`, not as a function argument
-2. **Forgetting `InvalidateSnapshot()`** — DOM-mutating tools must invalidate before executing
+2. **Calling `InvalidateSnapshot()` inside handlers** — `Execute()` handles invalidation automatically after the handler returns. Calling it inside the handler destroys the snapshot before ref-based resolution can use it
 3. **Using `WithSnapshot: false` on tools that need ref continuity** — subsequent ref-based operations will fail with "no snapshot available"
 4. **Not calling `waitDOMStable(page)`** — after DOM mutations, wait for stability before reading state
 5. **Importing `proto` without using CDP methods** — only import `github.com/go-rod/rod/lib/proto` when using Chrome DevTools Protocol directly

@@ -46,8 +46,6 @@ var (
 // beforeunload dialog blocks navigation before our auto-accept fires).
 func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page) error) server.ToolHandlerFunc {
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
-		rodCtx.InvalidateSnapshot()
 		page, err := rodCtx.ControlledPage()
 		if err != nil {
 			return toolErr(name, err)
@@ -65,8 +63,6 @@ func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page)
 var (
 	NavigationHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
-			rodCtx.InvalidateSnapshot()
 			args := request.GetArguments()
 			url, err := getStringArg(args, "url")
 			if err != nil {

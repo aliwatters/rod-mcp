@@ -7,11 +7,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/aliwatters/rod-mcp/types"
+	"github.com/aliwatters/rod-mcp/types/js"
 )
 
 const (
@@ -22,8 +24,8 @@ const (
 
 var (
 	Login = mcp.NewTool(LoginToolKey,
-		mcp.WithDescription("Execute a login flow in one call: navigate to URL, fill credentials, submit, and verify success. Replaces 5-6 individual MCP calls."),
-		mcp.WithString("url", mcp.Description("Login page URL"), mcp.Required()),
+		mcp.WithDescription("Execute a login flow in one call: navigate to URL, fill credentials, submit, and verify success. Supports both dedicated login pages and modal dialogs triggered by a button click. Replaces 5-6 individual MCP calls."),
+		mcp.WithString("url", mcp.Description("Login page URL (or base page URL when using trigger_selector)"), mcp.Required()),
 		mcp.WithString("username", mcp.Description("Username or email to fill"), mcp.Required()),
 		mcp.WithString("password", mcp.Description("Password to fill"), mcp.Required()),
 		mcp.WithString("username_selector", mcp.Description("CSS selector for username/email field (default: input[type=email], input[name=email], input[name=username])")),
@@ -32,6 +34,8 @@ var (
 		mcp.WithString("success_selector", mcp.Description("CSS selector that indicates login succeeded (waits for it to appear)")),
 		mcp.WithString("success_url_contains", mcp.Description("Substring to match in URL after login to verify success")),
 		mcp.WithNumber("timeout", mcp.Description("Max wait time for success verification in milliseconds (default: 15000)")),
+		mcp.WithString("trigger_selector", mcp.Description("CSS selector for a button/link that opens the login form (for modal-based logins). Navigate to url first, then click this element before filling credentials.")),
+		mcp.WithString("form_container", mcp.Description("CSS selector for the login form container to wait for after clicking trigger (default: [role=dialog]). Only used with trigger_selector.")),
 	)
 )
 
@@ -45,11 +49,28 @@ var defaultUsernameSelectors = []string{
 	"input[id=username]",
 }
 
+// loginSmartFill fills an input using the embedded smart fill JS for React support.
+func loginSmartFill(element *rod.Element, value string) error {
+	obj, err := element.Eval(js.SmartFillJS, value)
+	if err != nil {
+		return fmt.Errorf("smart fill failed: %w", err)
+	}
+	var result struct {
+		Success bool   `json:"success"`
+		Value   string `json:"value"`
+	}
+	if parseErr := json.Unmarshal([]byte(obj.Value.Str()), &result); parseErr != nil {
+		return nil // can't parse but fill was attempted
+	}
+	if !result.Success {
+		return fmt.Errorf("fill produced %q instead of expected value", result.Value)
+	}
+	return nil
+}
+
 var (
 	LoginHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			rodCtx.InvalidateSnapshot()
-
 			args := request.GetArguments()
 			loginURL, err := getStringArg(args, "url")
 			if err != nil {
@@ -70,12 +91,17 @@ var (
 			successSelector := getOptionalStringArg(args, "success_selector")
 			successURL := getOptionalStringArg(args, "success_url_contains")
 			timeout := getOptionalFloatArg(args, "timeout", defaultLoginTimeoutMs)
+			triggerSelector := getOptionalStringArg(args, "trigger_selector")
+			formContainer := getOptionalStringArg(args, "form_container")
 
 			if passSelector == "" {
 				passSelector = "input[type=password]"
 			}
 			if submitSelector == "" {
 				submitSelector = "button[type=submit]"
+			}
+			if formContainer == "" {
+				formContainer = "[role=dialog]"
 			}
 
 			// Step 1: Navigate to login page
@@ -91,55 +117,117 @@ var (
 			}
 			waitDOMStable(page)
 
-			// Step 2: Find and fill username field
-			if userSelector != "" {
-				el, err := page.Element(userSelector)
+			// Step 1b: If trigger_selector is set, click it to open the login form
+			if triggerSelector != "" {
+				triggerEl, err := page.Element(triggerSelector)
 				if err != nil {
-					return toolErr("login find username", fmt.Errorf("selector %q: %w", userSelector, err))
+					return toolErr("login find trigger", fmt.Errorf("selector %q: %w", triggerSelector, err))
 				}
-				if err := el.SelectAllText(); err != nil {
-					return toolErr("login clear username", err)
+				if err := triggerEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+					return toolErr("login click trigger", err)
 				}
-				if err := el.Input(username); err != nil {
-					return toolErr("login fill username", err)
+				// Wait for the form container to appear
+				if _, err := page.Timeout(5 * time.Second).Element(formContainer); err != nil {
+					return toolErr("login wait for form", fmt.Errorf("form container %q did not appear after clicking trigger: %w", formContainer, err))
 				}
-			} else {
-				// Try default selectors
-				filled := false
-				for _, sel := range defaultUsernameSelectors {
-					el, err := page.Element(sel)
-					if err == nil {
-						_ = el.SelectAllText()
-						if inputErr := el.Input(username); inputErr == nil {
-							filled = true
-							break
+				waitDOMStable(page)
+
+				// Scope selectors to form container for modal logins
+				if userSelector == "" {
+					// Try default selectors scoped to the form container
+					filled := false
+					for _, sel := range defaultUsernameSelectors {
+						scopedSel := formContainer + " " + sel
+						el, elErr := page.Element(scopedSel)
+						if elErr == nil {
+							if fillErr := loginSmartFill(el, username); fillErr == nil {
+								filled = true
+								break
+							}
 						}
 					}
+					if !filled {
+						return toolErr("login fill username", fmt.Errorf("could not find username field in %s; provide username_selector", formContainer))
+					}
+				} else {
+					el, err := page.Element(userSelector)
+					if err != nil {
+						return toolErr("login find username", fmt.Errorf("selector %q: %w", userSelector, err))
+					}
+					if err := loginSmartFill(el, username); err != nil {
+						return toolErr("login fill username", err)
+					}
 				}
-				if !filled {
-					return toolErr("login fill username", fmt.Errorf("could not find username field; provide username_selector"))
+
+				// Fill password (scoped to form container if no explicit selector)
+				passEl, err := page.Element(passSelector)
+				if err != nil {
+					// Try scoped selector
+					passEl, err = page.Element(formContainer + " " + passSelector)
+					if err != nil {
+						return toolErr("login find password", fmt.Errorf("selector %q: %w", passSelector, err))
+					}
 				}
-			}
+				if err := loginSmartFill(passEl, password); err != nil {
+					return toolErr("login fill password", err)
+				}
 
-			// Step 3: Fill password
-			passEl, err := page.Element(passSelector)
-			if err != nil {
-				return toolErr("login find password", fmt.Errorf("selector %q: %w", passSelector, err))
-			}
-			if err := passEl.SelectAllText(); err != nil {
-				return toolErr("login clear password", err)
-			}
-			if err := passEl.Input(password); err != nil {
-				return toolErr("login fill password", err)
-			}
+				// Submit (scoped to form container if no explicit selector)
+				submitEl, err := page.Element(submitSelector)
+				if err != nil {
+					submitEl, err = page.Element(formContainer + " " + submitSelector)
+					if err != nil {
+						return toolErr("login find submit", fmt.Errorf("selector %q: %w", submitSelector, err))
+					}
+				}
+				if err := submitEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+					return toolErr("login click submit", err)
+				}
+			} else {
+				// Standard login page flow (no trigger)
 
-			// Step 4: Submit
-			submitEl, err := page.Element(submitSelector)
-			if err != nil {
-				return toolErr("login find submit", fmt.Errorf("selector %q: %w", submitSelector, err))
-			}
-			if err := submitEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
-				return toolErr("login click submit", err)
+				// Step 2: Find and fill username field
+				if userSelector != "" {
+					el, err := page.Element(userSelector)
+					if err != nil {
+						return toolErr("login find username", fmt.Errorf("selector %q: %w", userSelector, err))
+					}
+					if err := loginSmartFill(el, username); err != nil {
+						return toolErr("login fill username", err)
+					}
+				} else {
+					filled := false
+					for _, sel := range defaultUsernameSelectors {
+						el, err := page.Element(sel)
+						if err == nil {
+							if fillErr := loginSmartFill(el, username); fillErr == nil {
+								filled = true
+								break
+							}
+						}
+					}
+					if !filled {
+						return toolErr("login fill username", fmt.Errorf("could not find username field; provide username_selector"))
+					}
+				}
+
+				// Step 3: Fill password
+				passEl, err := page.Element(passSelector)
+				if err != nil {
+					return toolErr("login find password", fmt.Errorf("selector %q: %w", passSelector, err))
+				}
+				if err := loginSmartFill(passEl, password); err != nil {
+					return toolErr("login fill password", err)
+				}
+
+				// Step 4: Submit
+				submitEl, err := page.Element(submitSelector)
+				if err != nil {
+					return toolErr("login find submit", fmt.Errorf("selector %q: %w", submitSelector, err))
+				}
+				if err := submitEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+					return toolErr("login click submit", err)
+				}
 			}
 
 			// Step 5: Verify success
@@ -213,4 +301,3 @@ var (
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
 )
-

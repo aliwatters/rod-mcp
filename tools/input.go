@@ -43,8 +43,6 @@ var (
 var (
 	PressKeyHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Key presses may modify DOM; invalidate so Execute rebuilds the snapshot.
-			rodCtx.InvalidateSnapshot()
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("press key", err)
@@ -105,8 +103,6 @@ var (
 
 	TypeHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Typing modifies DOM; invalidate so Execute rebuilds the snapshot.
-			rodCtx.InvalidateSnapshot()
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("type text", err)

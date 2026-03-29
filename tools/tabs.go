@@ -78,8 +78,6 @@ var (
 
 	TabSelectHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			// Switching tabs changes the active page; invalidate so Execute rebuilds the snapshot.
-			rodCtx.InvalidateSnapshot()
 			indexF, err := getFloatArg(request.GetArguments(), "index")
 			if err != nil {
 				return toolErr("select tab", err)
