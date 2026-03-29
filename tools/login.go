@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -60,7 +61,8 @@ func loginSmartFill(element *rod.Element, value string) error {
 		Value   string `json:"value"`
 	}
 	if parseErr := json.Unmarshal([]byte(obj.Value.Str()), &result); parseErr != nil {
-		return nil // can't parse but fill was attempted
+		log.Warnf("loginSmartFill: failed to parse smart fill result: %s", parseErr)
+		return nil // fill was attempted, can't verify
 	}
 	if !result.Success {
 		return fmt.Errorf("fill produced %q instead of expected value", result.Value)
