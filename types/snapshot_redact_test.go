@@ -17,7 +17,12 @@ func TestBuildSnapshot_RedactsPasswordFields(t *testing.T) {
 		t.Skip("skipping browser test in short mode")
 	}
 
-	l := launcher.New().Headless(true)
+	bin, found := launcher.LookPath()
+	if !found {
+		t.Skip("skipping: no browser binary found for rod launcher")
+	}
+
+	l := launcher.New().Bin(bin).Headless(true)
 	u, err := l.Launch()
 	if err != nil {
 		t.Skipf("skipping: cannot launch browser: %v", err)
@@ -28,8 +33,8 @@ func TestBuildSnapshot_RedactsPasswordFields(t *testing.T) {
 
 	page := browser.MustPage("")
 
-	// Inject the snapshot engine JS before setting document content.
-	// EvalOnNewDocument runs on future navigations, so also inject directly.
+	// Inject the snapshot engine JS so it runs on subsequent navigations.
+	// EvalOnNewDocument ensures the script is available on future documents.
 	if _, err := page.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
 		t.Fatalf("EvalOnNewDocument: %v", err)
 	}
