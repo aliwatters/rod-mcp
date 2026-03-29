@@ -28,12 +28,14 @@ var (
 	)
 
 	Click = mcp.NewTool(ClickToolKey,
-		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot), CSS selector, or accessible name/role. Priority: ref > selector > name."),
+		mcp.WithDescription("Perform click on a web page. Target element by ref (from snapshot), CSS selector, or accessible name/role. Priority: ref > selector > name. Supports right-click and double-click."),
 		mcp.WithString("element", mcp.Description("Human-readable element description used to obtain permission to interact with the element"), mcp.Required()),
 		mcp.WithString("ref", mcp.Description("Exact target element reference from the page snapshot.")),
 		mcp.WithString("selector", mcp.Description("CSS selector to find the element (e.g. '#submit-btn', '.my-class', 'input[name=email]').")),
 		mcp.WithString("name", mcp.Description("Accessible name to find the element by (case-insensitive substring match).")),
 		mcp.WithString("role", mcp.Description("ARIA role to filter by when using name-based targeting (e.g. button, link, textbox). Optional, used to disambiguate.")),
+		mcp.WithString("button", mcp.Description("Mouse button: left (default), right, or middle")),
+		mcp.WithNumber("click_count", mcp.Description("Number of clicks: 1 (default) or 2 for double-click")),
 	)
 
 	Hover = mcp.NewTool(HoverToolKey,
@@ -82,16 +84,44 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Invalidate snapshot before acting so Execute rebuilds a fresh one after.
 			rodCtx.InvalidateSnapshot()
-			page, element, ele, err := resolveSnapshotElement(rodCtx, request.GetArguments(), "click element")
+			args := request.GetArguments()
+			page, element, ele, err := resolveSnapshotElement(rodCtx, args, "click element")
 			if err != nil {
 				return toolErr("click element", err)
 			}
-			if err = element.Click(proto.InputMouseButtonLeft, 1); err != nil {
+
+			// Determine mouse button
+			btn := proto.InputMouseButtonLeft
+			btnName := getOptionalStringArg(args, "button")
+			switch btnName {
+			case "right":
+				btn = proto.InputMouseButtonRight
+			case "middle":
+				btn = proto.InputMouseButtonMiddle
+			case "", "left":
+				// default
+			default:
+				return toolErr("click element", fmt.Errorf("invalid button %q: must be left, right, or middle", btnName))
+			}
+
+			clickCount := int(getOptionalFloatArg(args, "click_count", 1))
+			if clickCount < 1 {
+				clickCount = 1
+			}
+
+			if err = element.Click(btn, clickCount); err != nil {
 				return toolErr("click element "+ele, err)
 			}
 
 			waitDOMStable(page)
-			return mcp.NewToolResultText(fmt.Sprintf("Click element %s successfully", ele)), nil
+			action := "Click"
+			if clickCount == 2 {
+				action = "Double-click"
+			}
+			if btnName == "right" {
+				action = "Right-click"
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("%s element %s successfully", action, ele)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 	}
