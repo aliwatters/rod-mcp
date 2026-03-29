@@ -18,10 +18,10 @@ const (
 
 var (
 	PageInfo = mcp.NewTool(PageInfoToolKey,
-		mcp.WithDescription("Return the current page URL, title, and loading state"),
+		mcp.WithDescription("Return the current page URL and title"),
 	)
 	PageStatus = mcp.NewTool(PageStatusToolKey,
-		mcp.WithDescription("Quick page health check: URL, title, console errors, network failures, DOM readiness, and viewport size in one call"),
+		mcp.WithDescription("Quick page health check: URL, title, console errors, network failures, DOM readiness, and viewport size in one call. Lists are capped at 10 items; counts reflect totals."),
 		mcp.WithBoolean("include_console", mcp.Description("Include console error and warning messages (default: true)")),
 		mcp.WithBoolean("include_network", mcp.Description("Include failed network request details (default: false)")),
 	)

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -128,7 +129,7 @@ func resolveByName(rodCtx *types.Context, name, role string) (*rod.Element, erro
 		if len(similar) > 0 {
 			msg += fmt.Sprintf("\n\nAvailable %ss:\n%s", role, strings.Join(similar, "\n"))
 		}
-		return nil, fmt.Errorf("%s", msg)
+		return nil, errors.New(msg)
 	}
 
 	if len(matches) > 1 {
