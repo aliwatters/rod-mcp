@@ -66,6 +66,7 @@ var (
 		BasicAuth,
 		Batch,
 		CompareScreenshots,
+		Login,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -113,6 +114,7 @@ var (
 		BasicAuthToolKey:            BasicAuthHandler,
 		BatchToolKey:                BatchHandler,
 		CompareScreenshotsToolKey:   CompareScreenshotsHandler,
+		LoginToolKey:                LoginHandler,
 	}
 )
 
