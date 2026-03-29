@@ -17,7 +17,12 @@ func TestBuildSnapshot_RedactsPasswordFields(t *testing.T) {
 		t.Skip("skipping browser test in short mode")
 	}
 
-	u := launcher.New().Headless(true).MustLaunch()
+	l := launcher.New().Headless(true)
+	u, err := l.Launch()
+	if err != nil {
+		t.Skipf("skipping: cannot launch browser: %v", err)
+	}
+
 	browser := rod.New().ControlURL(u).MustConnect()
 	defer browser.MustClose()
 
