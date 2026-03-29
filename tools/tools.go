@@ -58,6 +58,7 @@ var (
 		A11yAudit,
 		PageInfo,
 		PageStatus,
+		AssertElement,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -97,6 +98,7 @@ var (
 		A11yAuditToolKey:       A11yAuditHandler,
 		PageInfoToolKey:        PageInfoHandler,
 		PageStatusToolKey:      PageStatusHandler,
+		AssertElementToolKey:   AssertElementHandler,
 	}
 )
 
