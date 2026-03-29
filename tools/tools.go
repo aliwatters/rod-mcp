@@ -60,6 +60,8 @@ var (
 		PageStatus,
 		AssertElement,
 		FrameList,
+		Download,
+		Race,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -101,6 +103,8 @@ var (
 		PageStatusToolKey:      PageStatusHandler,
 		AssertElementToolKey:   AssertElementHandler,
 		FrameListToolKey:       FrameListHandler,
+		DownloadToolKey:        DownloadHandler,
+		RaceToolKey:            RaceHandler,
 	}
 )
 
