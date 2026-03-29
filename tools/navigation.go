@@ -2,10 +2,12 @@ package tools
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -22,8 +24,10 @@ const (
 
 var (
 	Navigation = mcp.NewTool(NavigationToolKey,
-		mcp.WithDescription("Navigate to a URL"),
+		mcp.WithDescription("Navigate to a URL. Optionally include an accessibility snapshot or screenshot in the response to save round trips."),
 		mcp.WithString("url", mcp.Description("URL to navigate to"), mcp.Required()),
+		mcp.WithBoolean("snapshot", mcp.Description("Include accessibility snapshot in response (default: false). Only available in text mode.")),
+		mcp.WithBoolean("screenshot", mcp.Description("Include screenshot in response (default: false)")),
 	)
 	GoBack = mcp.NewTool(GoBackToolKey,
 		mcp.WithDescription("Go back in the browser history, go back to the previous page"),
@@ -63,13 +67,17 @@ var (
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 			// Navigation changes the page; invalidate so Execute rebuilds the snapshot.
 			rodCtx.InvalidateSnapshot()
-			url, err := getStringArg(request.GetArguments(), "url")
+			args := request.GetArguments()
+			url, err := getStringArg(args, "url")
 			if err != nil {
 				return toolErr("navigate", err)
 			}
 			if !utils.IsHttp(url) {
 				return nil, toolError("navigate", fmt.Errorf("invalid URL: %s", url))
 			}
+
+			wantSnapshot := getOptionalBoolArg(args, "snapshot", false)
+			wantScreenshot := getOptionalBoolArg(args, "screenshot", false)
 
 			page, err := rodCtx.EnsurePage()
 			if err != nil {
@@ -88,8 +96,37 @@ var (
 				return toolErr("navigate to "+url, err)
 			}
 			waitDOMStable(page)
-			return mcp.NewToolResultText(fmt.Sprintf("Navigated to %s", url)), nil
+
+			result := fmt.Sprintf("Navigated to %s", url)
+
+			// Append inline snapshot if requested
+			if wantSnapshot && rodCtx.CurrentMode() == types.Text {
+				snapshot, snapErr := rodCtx.BuildSnapshot()
+				if snapErr != nil {
+					log.Warnf("navigate snapshot: %s", snapErr)
+				} else {
+					result += "\n\n" + snapshot
+				}
+			}
+
+			// Return screenshot inline if requested
+			if wantScreenshot {
+				bin, shotErr := page.Screenshot(false, &proto.PageCaptureScreenshot{
+					Format: proto.PageCaptureScreenshotFormatPng,
+				})
+				if shotErr != nil {
+					log.Warnf("navigate screenshot: %s", shotErr)
+				} else {
+					encoded := base64.StdEncoding.EncodeToString(bin)
+					return mcp.NewToolResultImage(result, encoded, "image/png"), nil
+				}
+			}
+
+			return mcp.NewToolResultText(result), nil
 		}
+		// In text mode, auto-append snapshot (preserving existing behavior).
+		// The explicit snapshot=true param adds it earlier in the response for
+		// agents that want it bundled with navigation in non-text mode.
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
 
