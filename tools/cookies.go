@@ -4,7 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -19,7 +24,7 @@ const (
 var (
 	Cookies = mcp.NewTool(CookiesToolKey,
 		mcp.WithDescription("Manage browser cookies via CDP. Get, set, delete, or clear cookies including httpOnly cookies not visible to document.cookie."),
-		mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("get", "set", "delete", "clear")),
+		mcp.WithString("action", mcp.Description("Action to perform"), mcp.Required(), mcp.Enum("get", "set", "delete", "clear", "save", "restore")),
 		mcp.WithString("url", mcp.Description("URL to get cookies for (get) or associate with (set/delete). Defaults to current page URL.")),
 		mcp.WithString("name", mcp.Description("Cookie name (required for set and delete)")),
 		mcp.WithString("value", mcp.Description("Cookie value (required for set)")),
@@ -28,6 +33,7 @@ var (
 		mcp.WithBoolean("secure", mcp.Description("Secure flag (optional for set)")),
 		mcp.WithBoolean("httpOnly", mcp.Description("HttpOnly flag (optional for set)")),
 		mcp.WithString("sameSite", mcp.Description("SameSite attribute (optional for set)"), mcp.Enum("Strict", "Lax", "None")),
+		mcp.WithString("file_path", mcp.Description("File path for save/restore actions. Must be within the output directory.")),
 	)
 )
 
@@ -153,10 +159,101 @@ var (
 				}
 				return mcp.NewToolResultText("All cookies cleared"), nil
 
-			default:
-				return nil, fmt.Errorf("invalid action %q: must be get, set, delete, or clear", action)
+			case "save":
+				savePath, err := getCookieFilePath(rodCtx, args)
+				if err != nil {
+					return toolErr("save cookies", err)
+				}
+
+				resp, err := proto.NetworkGetAllCookies{}.Call(page)
+				if err != nil {
+					return toolErr("save cookies", err)
+				}
+				data, err := json.MarshalIndent(resp.Cookies, "", "  ")
+				if err != nil {
+					return toolErr("save cookies", err)
+				}
+				if err := os.WriteFile(savePath, data, 0o644); err != nil {
+					return toolErr("save cookies", fmt.Errorf("write %s: %w", savePath, err))
+				}
+				return mcp.NewToolResultText(fmt.Sprintf("Saved %d cookies to %s", len(resp.Cookies), savePath)), nil
+
+			case "restore":
+				restorePath, err := getCookieFilePath(rodCtx, args)
+				if err != nil {
+					return toolErr("restore cookies", err)
+				}
+
+				data, err := os.ReadFile(restorePath)
+				if err != nil {
+					return toolErr("restore cookies", fmt.Errorf("read %s: %w", restorePath, err))
+				}
+				var cookies []*proto.NetworkCookie
+				if err := json.Unmarshal(data, &cookies); err != nil {
+					return toolErr("restore cookies", fmt.Errorf("parse %s: %w", restorePath, err))
+				}
+
+				now := proto.TimeSinceEpoch(time.Now().Unix())
+				var restored, skipped int
+				for _, c := range cookies {
+					// Skip expired cookies
+					if c.Expires > 0 && c.Expires < now {
+						log.Debugf("cookie %q expired, skipping", c.Name)
+						skipped++
+						continue
+					}
+					setCookie := proto.NetworkSetCookie{
+						Name:     c.Name,
+						Value:    c.Value,
+						Domain:   c.Domain,
+						Path:     c.Path,
+						Secure:   c.Secure,
+						HTTPOnly: c.HTTPOnly,
+						SameSite: c.SameSite,
+					}
+					if c.Expires > 0 {
+						setCookie.Expires = c.Expires
+					}
+					if _, err := setCookie.Call(page); err != nil {
+						log.Warnf("failed to restore cookie %q: %s", c.Name, err)
+						continue
+					}
+					restored++
+				}
+				msg := fmt.Sprintf("Restored %d cookies from %s", restored, restorePath)
+				if skipped > 0 {
+					msg += fmt.Sprintf(" (%d expired cookies skipped)", skipped)
+				}
+				return mcp.NewToolResultText(msg), nil
+
+					default:
+				return nil, fmt.Errorf("invalid action %q: must be get, set, delete, clear, save, or restore", action)
 			}
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
+
+// getCookieFilePath resolves and validates the file path for cookie save/restore.
+// Restricts paths to be within the output directory to prevent path traversal.
+func getCookieFilePath(rodCtx *types.Context, args map[string]interface{}) (string, error) {
+	fp := getOptionalStringArg(args, "file_path")
+	if fp == "" {
+		return "", fmt.Errorf("file_path is required for save/restore actions")
+	}
+
+	outDir, err := types.ResolveOutputDir(rodCtx.Config())
+	if err != nil {
+		return "", err
+	}
+
+	// Resolve relative to output directory
+	if !filepath.IsAbs(fp) {
+		fp = filepath.Join(outDir, fp)
+	}
+	cleaned := filepath.Clean(fp)
+	if !strings.HasPrefix(cleaned, filepath.Clean(outDir)+string(os.PathSeparator)) {
+		return "", fmt.Errorf("file_path must be within output directory %s", outDir)
+	}
+	return cleaned, nil
+}
