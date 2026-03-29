@@ -611,7 +611,7 @@ const roleUtils = {
                 if (role === 'textbox') {
                     options.visitedElements.add(element);
                     if (tagName === 'INPUT' || tagName === 'TEXTAREA')
-                        return element.value;
+                        return element.type === 'password' ? '[REDACTED]' : element.value;
                     return element.textContent || '';
                 }
                 if (['combobox', 'listbox'].includes(role)) {
@@ -1177,7 +1177,7 @@ class SnapshotEngine {
 
         if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
             if (element.type !== 'checkbox' && element.type !== 'radio')
-                result.children = [element.value];
+                result.children = [element.type === 'password' ? '[REDACTED]' : element.value];
         }
 
         return result;
