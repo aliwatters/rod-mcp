@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
+	"github.com/go-rod/rod/lib/input"
+	"github.com/go-rod/rod/lib/proto"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -18,7 +20,7 @@ import (
 const FillFormToolKey = "rod_fill_form"
 
 var FillForm = mcp.NewTool(FillFormToolKey,
-	mcp.WithDescription("Batch fill multiple form fields in one call. Each field is targeted by CSS selector. Automatically handles React controlled inputs. Returns a summary of results per field."),
+	mcp.WithDescription("Batch fill multiple form fields in one call. Each field is targeted by CSS selector. Automatically handles React controlled inputs. Optionally submit the form after filling. Returns a summary of results per field and a page snapshot."),
 	mcp.WithArray("fields", mcp.Description("Array of fields to fill. Each field has a 'selector' (CSS selector) and 'value' (text to fill)."),
 		mcp.Items(map[string]interface{}{
 			"type": "object",
@@ -36,6 +38,7 @@ var FillForm = mcp.NewTool(FillFormToolKey,
 		}),
 		mcp.Required(),
 	),
+	mcp.WithString("submit", mcp.Description("Submit the form after filling. Use a CSS selector string (e.g. 'button[type=submit]') to click a specific submit element, or 'true' to press Enter in the last filled field.")),
 )
 
 // smartFillResult holds the result of a smart fill operation.
@@ -172,6 +175,34 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 
 		waitDOMStable(page)
 
+		// Handle submit option: CSS selector to click, or "true" to press Enter.
+		submitArg := getOptionalStringArg(request.GetArguments(), "submit")
+		submitted := false
+		var submitErr string
+		if submitArg != "" {
+			if submitArg == "true" {
+				// Press Enter in the last filled field (native form submission).
+				if err := page.Keyboard.Press(input.Enter); err != nil {
+					submitErr = fmt.Sprintf("submit (Enter) failed: %s", err)
+				} else {
+					submitted = true
+				}
+			} else {
+				// Treat as CSS selector — find and click the submit element.
+				submitEl, err := resolveBySelector(page, submitArg)
+				if err != nil {
+					submitErr = fmt.Sprintf("submit element not found: %s", err)
+				} else if err := submitEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
+					submitErr = fmt.Sprintf("submit click failed: %s", err)
+				} else {
+					submitted = true
+				}
+			}
+			if submitted {
+				waitDOMStable(page)
+			}
+		}
+
 		// Build summary text.
 		var sb strings.Builder
 		sb.WriteString(fmt.Sprintf("Filled %d/%d fields successfully.\n", successCount, len(fieldsSlice)))
@@ -184,8 +215,13 @@ var FillFormHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 				sb.WriteString(fmt.Sprintf("  %s: PARTIAL (method=%s, final=%q)\n", r.Selector, r.Method, r.Value))
 			}
 		}
+		if submitted {
+			sb.WriteString("Form submitted successfully.\n")
+		} else if submitErr != "" {
+			sb.WriteString(fmt.Sprintf("Submit: ERROR — %s\n", submitErr))
+		}
 
 		return mcp.NewToolResultText(sb.String()), nil
 	}
-	return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
+	return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})
 }
