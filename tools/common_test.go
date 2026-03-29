@@ -160,24 +160,44 @@ func TestParseKey(t *testing.T) {
 	}
 }
 
-func TestScreenshotToolHasNoUnusedParams(t *testing.T) {
+func TestScreenshotToolDefinition(t *testing.T) {
 	props := Screenshot.InputSchema.Properties
 	if props == nil {
 		t.Fatal("Screenshot tool has no properties")
 	}
 
-	// Should only have "name" parameter
-	if _, ok := props["selector"]; ok {
-		t.Error("Screenshot tool should not have unused 'selector' parameter")
-	}
-	if _, ok := props["width"]; ok {
-		t.Error("Screenshot tool should not have unused 'width' parameter")
-	}
-	if _, ok := props["height"]; ok {
-		t.Error("Screenshot tool should not have unused 'height' parameter")
-	}
+	// Required params
 	if _, ok := props["name"]; !ok {
 		t.Error("Screenshot tool should have 'name' parameter")
+	}
+
+	// Optional params for element and full-page screenshots
+	if _, ok := props["full_page"]; !ok {
+		t.Error("Screenshot tool should have 'full_page' parameter")
+	}
+	if _, ok := props["selector"]; !ok {
+		t.Error("Screenshot tool should have 'selector' parameter")
+	}
+	if _, ok := props["ref"]; !ok {
+		t.Error("Screenshot tool should have 'ref' parameter")
+	}
+	if _, ok := props["save_to"]; !ok {
+		t.Error("Screenshot tool should have 'save_to' parameter")
+	}
+
+	// Removed params should stay removed
+	if _, ok := props["width"]; ok {
+		t.Error("Screenshot tool should not have 'width' parameter")
+	}
+	if _, ok := props["height"]; ok {
+		t.Error("Screenshot tool should not have 'height' parameter")
+	}
+
+	// Only "name" should be required
+	for _, r := range Screenshot.InputSchema.Required {
+		if r != "name" {
+			t.Errorf("Screenshot tool has unexpected required param %q — selector/ref/full_page/save_to should be optional", r)
+		}
 	}
 }
 
