@@ -23,8 +23,9 @@ const (
 
 var (
 	PressKey = mcp.NewTool(PressKeyToolKey,
-		mcp.WithDescription("Press a key on the keyboard"),
+		mcp.WithDescription("Press a key on the keyboard, optionally with modifier keys (Ctrl, Shift, Alt, Meta)"),
 		mcp.WithString("key", mcp.Description("Name of the key to press or a character to generate, such as `ArrowLeft` or `a`"), mcp.Required()),
+		mcp.WithArray("modifiers", mcp.Description("Modifier keys to hold: control, shift, alt, meta"), mcp.Items(map[string]interface{}{"type": "string"})),
 	)
 	Type = mcp.NewTool(TypeToolKey,
 		mcp.WithDescription("Type a string of text character by character with realistic keyboard events. Better than rod_fill for React controlled inputs. Use this instead of multiple rod_press calls."),
@@ -48,7 +49,8 @@ var (
 			if err != nil {
 				return toolErr("press key", err)
 			}
-			keyStr, err := getStringArg(request.GetArguments(), "key")
+			args := request.GetArguments()
+			keyStr, err := getStringArg(args, "key")
 			if err != nil {
 				return toolErr("press key", err)
 			}
@@ -56,11 +58,47 @@ var (
 			if err != nil {
 				return toolErr("parse key "+keyStr, err)
 			}
-			if err = page.Keyboard.Press(key); err != nil {
-				return toolErr("press key "+keyStr, err)
+
+			// Parse modifier keys
+			modifiers, err := utils.OptionalStringArrayParam(request, "modifiers")
+			if err != nil {
+				return toolErr("parse modifiers", err)
 			}
+
+			if len(modifiers) > 0 {
+				// Press modifiers down
+				for _, mod := range modifiers {
+					modKey, modErr := parseModifier(mod)
+					if modErr != nil {
+						return toolErr("press modifier", modErr)
+					}
+					if err = page.Keyboard.Press(modKey); err != nil {
+						return toolErr("press modifier "+mod, err)
+					}
+				}
+				// Type the key
+				if err = page.Keyboard.Type(key); err != nil {
+					return toolErr("type key "+keyStr, err)
+				}
+				// Release modifiers in reverse order
+				for i := len(modifiers) - 1; i >= 0; i-- {
+					modKey, _ := parseModifier(modifiers[i])
+					if err = page.Keyboard.Release(modKey); err != nil {
+						return toolErr("release modifier "+modifiers[i], err)
+					}
+				}
+			} else {
+				if err = page.Keyboard.Press(key); err != nil {
+					return toolErr("press key "+keyStr, err)
+				}
+			}
+
 			waitDOMStable(page)
-			return mcp.NewToolResultText(fmt.Sprintf("Press key %s successfully", keyStr)), nil
+			desc := keyStr
+			if len(modifiers) > 0 {
+				desc = fmt.Sprintf("%s+%s", joinModifiers(modifiers), keyStr)
+			}
+			return mcp.NewToolResultText(fmt.Sprintf("Press key %s successfully", desc)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
 	}
