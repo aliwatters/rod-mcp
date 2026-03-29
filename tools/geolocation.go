@@ -28,10 +28,6 @@ var (
 var (
 	GeolocationHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			browser, err := rodCtx.ControlledBrowser()
-			if err != nil {
-				return toolErr("geolocation", err)
-			}
 			page, err := rodCtx.ControlledPage()
 			if err != nil {
 				return toolErr("geolocation", err)
@@ -65,7 +61,11 @@ var (
 				return toolErr("geolocation", fmt.Errorf("longitude must be between -180 and 180, got %f", lng))
 			}
 
-			// Auto-grant geolocation permission
+			// Auto-grant geolocation permission (requires browser-level access)
+			browser, err := rodCtx.ControlledBrowser()
+			if err != nil {
+				return toolErr("geolocation", err)
+			}
 			grantErr := proto.BrowserGrantPermissions{
 				Permissions: []proto.BrowserPermissionType{"geolocation"},
 			}.Call(browser)
