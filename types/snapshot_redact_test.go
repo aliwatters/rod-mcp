@@ -33,8 +33,8 @@ func TestBuildSnapshot_RedactsPasswordFields(t *testing.T) {
 
 	page := browser.MustPage("")
 
-	// Inject the snapshot engine JS so it runs on subsequent navigations.
-	// EvalOnNewDocument ensures the script is available on future documents.
+	// Inject the snapshot engine JS via EvalOnNewDocument so it is available
+	// when BuildSnapshot calls the injected functions on the page.
 	if _, err := page.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
 		t.Fatalf("EvalOnNewDocument: %v", err)
 	}
