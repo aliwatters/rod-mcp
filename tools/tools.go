@@ -56,6 +56,8 @@ var (
 		Performance,
 		Drag,
 		A11yAudit,
+		PageInfo,
+		PageStatus,
 	}
 	CommonToolHandlers = map[string]ToolHandler{
 		ConfigureToolKey:       ConfigureHandler,
@@ -93,6 +95,8 @@ var (
 		PerformanceToolKey:     PerformanceHandler,
 		DragToolKey:            DragHandler,
 		A11yAuditToolKey:       A11yAuditHandler,
+		PageInfoToolKey:        PageInfoHandler,
+		PageStatusToolKey:      PageStatusHandler,
 	}
 )
 

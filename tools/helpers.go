@@ -77,6 +77,10 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 func resolveBySelector(page *rod.Page, selector string) (*rod.Element, error) {
 	element, err := page.Element(selector)
 	if err != nil {
+		info, infoErr := page.Info()
+		if infoErr == nil {
+			return nil, fmt.Errorf("no element found for CSS selector %q on page %q (%s): %w", selector, info.Title, info.URL, err)
+		}
 		return nil, fmt.Errorf("no element found for CSS selector %q: %w", selector, err)
 	}
 	return element, nil
@@ -102,10 +106,29 @@ func resolveByName(rodCtx *types.Context, name, role string) (*rod.Element, erro
 	matches := snapshot.FindByNameRole(name, role)
 
 	if len(matches) == 0 {
+		ctx := pageContext(rodCtx)
+		// Find similar elements with the same role for actionable suggestions
+		var similar []string
 		if role != "" {
-			return nil, fmt.Errorf("no element found with name %q and role %q", name, role)
+			sameRole := snapshot.FindByNameRole("", role)
+			for i, m := range sameRole {
+				if i >= 5 {
+					break
+				}
+				similar = append(similar, fmt.Sprintf("  ref=%s  %s", m.Ref, m.Raw))
+			}
 		}
-		return nil, fmt.Errorf("no element found with name %q", name)
+		msg := fmt.Sprintf("no element found with name %q", name)
+		if role != "" {
+			msg = fmt.Sprintf("no element found with name %q and role %q", name, role)
+		}
+		if ctx != "" {
+			msg += fmt.Sprintf(" on %s", ctx)
+		}
+		if len(similar) > 0 {
+			msg += fmt.Sprintf("\n\nAvailable %ss:\n%s", role, strings.Join(similar, "\n"))
+		}
+		return nil, fmt.Errorf("%s", msg)
 	}
 
 	if len(matches) > 1 {
