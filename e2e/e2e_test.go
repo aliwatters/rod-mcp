@@ -388,7 +388,7 @@ func TestE2E_Navigation(t *testing.T) {
 		start := time.Now()
 		result := h.callWithTimeout("rod_navigate", map[string]any{
 			"url": "https://the-internet.herokuapp.com/nonexistent-page-404",
-		}, timeoutMedium)
+		}, timeoutLong)
 		elapsed := time.Since(start)
 		assertContains(t, result, "HTTP 404")
 		if elapsed > 10*time.Second {
@@ -409,7 +409,7 @@ func TestE2E_Login(t *testing.T) {
 			"url":      "https://the-internet.herokuapp.com/nonexistent-login-404",
 			"username": "test@example.com",
 			"password": "password123",
-		}, timeoutMedium)
+		}, timeoutLong)
 		elapsed := time.Since(start)
 		assertContains(t, result, "HTTP 404")
 		if elapsed > 10*time.Second {
