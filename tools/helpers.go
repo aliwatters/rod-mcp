@@ -27,6 +27,25 @@ func truncateContent(s string, maxLen int) (string, bool) {
 	return s[:maxLen], true
 }
 
+// checkNavigationStatus inspects captured network requests for the navigated URL
+// and returns an error if the main document response has a 4xx or 5xx status code.
+// This allows tools to fail fast instead of waiting for timeout on error pages.
+// Iterates from newest to oldest to handle stale entries in the ring buffer.
+func checkNavigationStatus(rodCtx *types.Context, url string) error {
+	requests := rodCtx.NetworkRequests(url, "", false)
+	for i := len(requests) - 1; i >= 0; i-- {
+		req := requests[i]
+		if req.Type != "Document" {
+			continue
+		}
+		if req.Status >= 400 {
+			return fmt.Errorf("page returned HTTP %d — check the URL", req.Status)
+		}
+		return nil // found the most recent document request with a non-error status
+	}
+	return nil // no matching document request found — don't block
+}
+
 // waitDOMStable waits for the DOM to stabilize, logging errors at debug level.
 func waitDOMStable(page *rod.Page) {
 	if err := page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff); err != nil {

@@ -383,6 +383,39 @@ func TestE2E_Navigation(t *testing.T) {
 		})
 		assertContainsAny(t, result, "visible", "found", "appeared")
 	})
+
+	t.Run("navigate_404_fails_fast", func(t *testing.T) {
+		start := time.Now()
+		result := h.callWithTimeout("rod_navigate", map[string]any{
+			"url": "https://the-internet.herokuapp.com/nonexistent-page-404",
+		}, timeoutLong)
+		elapsed := time.Since(start)
+		assertContains(t, result, "HTTP 404")
+		if elapsed > 10*time.Second {
+			t.Errorf("expected fast failure but took %v", elapsed)
+		}
+	})
+}
+
+// TestE2E_Login tests the rod_login tool.
+func TestE2E_Login(t *testing.T) {
+	skipIfShort(t)
+	h := newHarness(t)
+	h.initialize()
+
+	t.Run("login_404_fails_fast", func(t *testing.T) {
+		start := time.Now()
+		result := h.callWithTimeout("rod_login", map[string]any{
+			"url":      "https://the-internet.herokuapp.com/nonexistent-login-404",
+			"username": "test@example.com",
+			"password": "password123",
+		}, timeoutLong)
+		elapsed := time.Since(start)
+		assertContains(t, result, "HTTP 404")
+		if elapsed > 10*time.Second {
+			t.Errorf("expected fast failure but took %v", elapsed)
+		}
+	})
 }
 
 // TestE2E_Tabs tests tab_new, tab_list, tab_select, and tab_close.

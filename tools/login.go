@@ -119,6 +119,16 @@ var (
 			}
 			waitDOMStable(page)
 
+			// Fail fast if the login page returned an HTTP error (e.g. 404).
+			// Use the final page URL to handle redirects (e.g. http→https).
+			checkURL := loginURL
+			if pageInfo, infoErr := page.Info(); infoErr == nil && pageInfo.URL != "" {
+				checkURL = pageInfo.URL
+			}
+			if err := checkNavigationStatus(rodCtx, checkURL); err != nil {
+				return toolErr("login navigate", err)
+			}
+
 			// Step 1b: If trigger_selector is set, click it to open the login form
 			if triggerSelector != "" {
 				triggerEl, err := page.Element(triggerSelector)

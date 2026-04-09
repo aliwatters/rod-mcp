@@ -93,6 +93,16 @@ var (
 			}
 			waitDOMStable(page)
 
+			// Fail fast if the page returned an HTTP error (e.g. 404, 500).
+			// Use the final page URL to handle redirects (e.g. http→https).
+			checkURL := url
+			if info, infoErr := page.Info(); infoErr == nil && info.URL != "" {
+				checkURL = info.URL
+			}
+			if err = checkNavigationStatus(rodCtx, checkURL); err != nil {
+				return toolErr("navigate to "+url, err)
+			}
+
 			result := fmt.Sprintf("Navigated to %s", url)
 
 			// Append inline snapshot if requested
