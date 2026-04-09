@@ -119,6 +119,11 @@ var (
 			}
 			waitDOMStable(page)
 
+			// Fail fast if the login page returned an HTTP error (e.g. 404)
+			if err := checkNavigationStatus(rodCtx, loginURL); err != nil {
+				return toolErr("login navigate", err)
+			}
+
 			// Step 1b: If trigger_selector is set, click it to open the login form
 			if triggerSelector != "" {
 				triggerEl, err := page.Element(triggerSelector)

@@ -93,6 +93,11 @@ var (
 			}
 			waitDOMStable(page)
 
+			// Fail fast if the page returned an HTTP error (e.g. 404, 500)
+			if err = checkNavigationStatus(rodCtx, url); err != nil {
+				return toolErr("navigate to "+url, err)
+			}
+
 			result := fmt.Sprintf("Navigated to %s", url)
 
 			// Append inline snapshot if requested
