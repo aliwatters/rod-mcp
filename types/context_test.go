@@ -204,7 +204,8 @@ func TestReconfigure_UpdatesConfig(t *testing.T) {
 	headless := false
 	endpoint := "http://localhost:9222"
 
-	err := ctx.Reconfigure(&headless, &endpoint)
+	stealth := true
+	err := ctx.Reconfigure(&headless, &endpoint, &stealth)
 	if err != nil {
 		t.Fatalf("Reconfigure: unexpected error: %v", err)
 	}
@@ -215,6 +216,9 @@ func TestReconfigure_UpdatesConfig(t *testing.T) {
 	if ctx.config.CDPEndpoint != endpoint {
 		t.Errorf("Reconfigure: CDPEndpoint = %q, want %q", ctx.config.CDPEndpoint, endpoint)
 	}
+	if ctx.config.Stealth != true {
+		t.Error("Reconfigure: Stealth should be true")
+	}
 }
 
 func TestReconfigure_NilFields_NoChange(t *testing.T) {
@@ -222,16 +226,16 @@ func TestReconfigure_NilFields_NoChange(t *testing.T) {
 	ctx.config.Headless = true
 	ctx.config.CDPEndpoint = "http://existing"
 
-	err := ctx.Reconfigure(nil, nil)
+	err := ctx.Reconfigure(nil, nil, nil)
 	if err != nil {
-		t.Fatalf("Reconfigure(nil, nil): unexpected error: %v", err)
+		t.Fatalf("Reconfigure(nil, nil, nil): unexpected error: %v", err)
 	}
 
 	if ctx.config.Headless != true {
-		t.Error("Reconfigure(nil, nil): Headless should remain true")
+		t.Error("Reconfigure(nil, nil, nil): Headless should remain true")
 	}
 	if ctx.config.CDPEndpoint != "http://existing" {
-		t.Errorf("Reconfigure(nil, nil): CDPEndpoint changed unexpectedly to %q", ctx.config.CDPEndpoint)
+		t.Errorf("Reconfigure(nil, nil, nil): CDPEndpoint changed unexpectedly to %q", ctx.config.CDPEndpoint)
 	}
 }
 
@@ -277,5 +281,85 @@ func TestClose_WithTempDir_Cleanup(t *testing.T) {
 	err := ctx.Close()
 	if err != nil {
 		t.Errorf("Close with temp dir: unexpected error: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Stealth helpers
+// ---------------------------------------------------------------------------
+
+func TestChromeMajorVersion(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"124.0.6367.91", "124"},
+		{"130.0.6723.58", "130"},
+		{"99", "99"},
+		{"", ""},
+	}
+	for _, tc := range tests {
+		got := chromeMajorVersion(tc.input)
+		if got != tc.want {
+			t.Errorf("chromeMajorVersion(%q) = %q, want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestApplyStealthHeaders_FillsMissingHeaders(t *testing.T) {
+	ctx := newTestContext()
+	ctx.config.Stealth = true
+	// No browser running, so chromeVersion returns "".
+	// applyStealthHeaders should not crash; headers should remain empty for version-dependent fields.
+	headers := ctx.applyStealthHeaders(nil)
+	if headers == nil {
+		t.Fatal("applyStealthHeaders returned nil")
+	}
+	// Without a running browser, User-Agent and Sec-CH-UA should not be set.
+	if _, ok := headers["User-Agent"]; ok {
+		t.Error("expected no User-Agent header without a running browser")
+	}
+	if _, ok := headers["Sec-CH-UA"]; ok {
+		t.Error("expected no Sec-CH-UA header without a running browser")
+	}
+}
+
+func TestApplyStealthHeaders_PreservesExistingHeaders(t *testing.T) {
+	ctx := newTestContext()
+	ctx.config.Stealth = true
+
+	existing := map[string]string{
+		"User-Agent": "CustomAgent/1.0",
+		"Sec-CH-UA":  `"Custom";v="1"`,
+	}
+	headers := ctx.applyStealthHeaders(existing)
+	if headers["User-Agent"] != "CustomAgent/1.0" {
+		t.Errorf("User-Agent was overwritten: %q", headers["User-Agent"])
+	}
+	if headers["Sec-CH-UA"] != `"Custom";v="1"` {
+		t.Errorf("Sec-CH-UA was overwritten: %q", headers["Sec-CH-UA"])
+	}
+}
+
+func TestReconfigure_Stealth(t *testing.T) {
+	ctx := newTestContext()
+	ctx.config.Stealth = false
+
+	stealth := true
+	err := ctx.Reconfigure(nil, nil, &stealth)
+	if err != nil {
+		t.Fatalf("Reconfigure stealth: unexpected error: %v", err)
+	}
+	if !ctx.config.Stealth {
+		t.Error("Reconfigure: Stealth should be true")
+	}
+
+	stealth = false
+	err = ctx.Reconfigure(nil, nil, &stealth)
+	if err != nil {
+		t.Fatalf("Reconfigure stealth=false: unexpected error: %v", err)
+	}
+	if ctx.config.Stealth {
+		t.Error("Reconfigure: Stealth should be false")
 	}
 }
