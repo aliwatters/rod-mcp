@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"gopkg.in/yaml.v3"
 
@@ -208,14 +209,19 @@ func (s *Snapshot) walkIframeNode(node *yaml.Node, frame *rod.Page) *yaml.Node {
 
 	childFrameEle, err := utils.QueryEleByAria(frame, ref)
 	if err != nil {
+		log.Debugf("walkIframeNode: query element for ref %q: %s", ref, err)
 		return pairNode
 	}
 	childFrame, err := childFrameEle.Frame()
 	if err != nil {
+		log.Debugf("walkIframeNode: get frame for ref %q: %s", ref, err)
 		return pairNode
 	}
 	childSnapshot, err := s.captureSnapshotWithFrames(childFrame)
 	if err != nil || len(childSnapshot.Content) == 0 {
+		if err != nil {
+			log.Debugf("walkIframeNode: capture snapshot for ref %q: %s", ref, err)
+		}
 		return pairNode
 	}
 
