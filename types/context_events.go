@@ -1,23 +1,11 @@
 package types
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-)
-
-const (
-	// maxConsoleMessages is the maximum number of console messages retained.
-	maxConsoleMessages = 10000
-	// maxNetworkRequests is the maximum number of network requests retained.
-	maxNetworkRequests = 10000
-	// maxWSConnections is the maximum number of WebSocket connections retained.
-	maxWSConnections = 1000
-	// maxWSFrames is the maximum number of WebSocket frames retained.
-	maxWSFrames = 10000
 )
 
 // ConsoleMessage represents a captured browser console message.
@@ -77,71 +65,53 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 		}
 		text := strings.Join(parts, " ")
 		ctx.stateLock.Lock()
-		ctx.consoleMessages.Add(ConsoleMessage{
+		ctx.events.AddConsoleMessage(ConsoleMessage{
 			Level: string(e.Type),
 			Text:  text,
 		})
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkRequestWillBeSent) {
 		ctx.stateLock.Lock()
-		if ctx.pendingRequests == nil {
-			ctx.pendingRequests = make(map[string]int)
-		}
-		// AddWithIndex returns the internal ring-buffer slot index, which is
-		// stable until the slot is evicted by a future overflow.
-		idx := ctx.networkRequests.AddWithIndex(NetworkRequest{
+		ctx.events.AddNetworkRequest(NetworkRequest{
 			RequestID: string(e.RequestID),
 			Method:    e.Request.Method,
 			URL:       e.Request.URL,
 			Type:      string(e.Type),
 		})
-		ctx.pendingRequests[string(e.RequestID)] = idx
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkResponseReceived) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.pendingRequests[string(e.RequestID)]; ok {
-			status := e.Response.Status
-			typ := string(e.Type)
-			ctx.networkRequests.UpdateAt(idx, func(req *NetworkRequest) {
-				req.Status = status
-				req.Type = typ
-			})
-			delete(ctx.pendingRequests, string(e.RequestID))
-		}
+		ctx.events.CompleteNetworkRequest(string(e.RequestID), e.Response.Status, string(e.Type))
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketCreated) {
 		ctx.stateLock.Lock()
-		if ctx.wsConnIndex == nil {
-			ctx.wsConnIndex = make(map[string]int)
-		}
-		idx := ctx.wsConnections.AddWithIndex(WebSocketConnection{
+		ctx.events.AddWSConnection(WebSocketConnection{
 			RequestID: string(e.RequestID),
 			URL:       e.URL,
 		})
-		ctx.wsConnIndex[string(e.RequestID)] = idx
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameSent) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
 				conn.SentCount++
-				ctx.appendWSFrame(conn.URL, "sent", e.Response)
+				ctx.events.AppendWSFrame(conn.URL, "sent", e.Response)
 			})
 		}
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameReceived) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
 				conn.ReceivedCount++
-				ctx.appendWSFrame(conn.URL, "received", e.Response)
+				ctx.events.AppendWSFrame(conn.URL, "received", e.Response)
 			})
 		}
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketClosed) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
+		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
+			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
 				conn.Closed = true
 			})
 		}
@@ -156,28 +126,7 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMessage {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-
-	all := ctx.consoleMessages.Slice()
-	result := filterSlice(all, func(msg ConsoleMessage) bool {
-		return filterLevel == "" || msg.Level == filterLevel
-	})
-
-	if clear {
-		if filterLevel == "" {
-			ctx.consoleMessages.Clear()
-		} else {
-			// Rebuild the buffer keeping only non-matching messages.
-			fresh := NewRingBuffer[ConsoleMessage](maxConsoleMessages)
-			for _, msg := range filterSlice(all, func(msg ConsoleMessage) bool {
-				return msg.Level != filterLevel
-			}) {
-				fresh.Add(msg)
-			}
-			ctx.consoleMessages = fresh
-		}
-	}
-
-	return result
+	return ctx.events.ConsoleMessages(filterLevel, clear)
 }
 
 // NetworkRequests returns captured network requests, optionally filtered by URL pattern and method.
@@ -185,82 +134,33 @@ func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMes
 func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) []NetworkRequest {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-
-	result := filterSlice(ctx.networkRequests.Slice(), func(req NetworkRequest) bool {
-		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
-			return false
-		}
-		if filterMethod != "" && !strings.EqualFold(req.Method, filterMethod) {
-			return false
-		}
-		return true
-	})
-
-	if clear {
-		ctx.networkRequests.Clear()
-		ctx.pendingRequests = nil
-	}
-
-	return result
-}
-
-// appendWSFrame adds a WebSocket frame to the ring buffer (O(1), no copying).
-// Must be called with stateLock held.
-func (ctx *Context) appendWSFrame(url, direction string, frame *proto.NetworkWebSocketFrame) {
-	ctx.wsFrames.Add(WebSocketFrame{
-		URL:         url,
-		Direction:   direction,
-		PayloadData: frame.PayloadData,
-		Opcode:      int(frame.Opcode),
-	})
+	return ctx.events.NetworkRequests(filterURL, filterMethod, clear)
 }
 
 // GetRequestID returns the CDP request ID for a network request at the given index.
 func (ctx *Context) GetRequestID(index int) (string, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-
-	all := ctx.networkRequests.Slice()
-	if len(all) == 0 {
-		return "", fmt.Errorf("no network requests captured")
-	}
-	if index < 0 || index >= len(all) {
-		return "", fmt.Errorf("request index %d out of range (0-%d)", index, len(all)-1)
-	}
-	return all[index].RequestID, nil
+	return ctx.events.GetRequestID(index)
 }
 
 // WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
 func (ctx *Context) WebSocketConnections(urlFilter string) []WebSocketConnection {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-
-	return filterSlice(ctx.wsConnections.Slice(), func(conn WebSocketConnection) bool {
-		return urlFilter == "" || strings.Contains(conn.URL, urlFilter)
-	})
+	return ctx.events.WebSocketConnections(urlFilter)
 }
 
 // WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
 func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFrame {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-
-	return filterSlice(ctx.wsFrames.Slice(), func(f WebSocketFrame) bool {
-		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
-			return false
-		}
-		if direction != "" && f.Direction != direction {
-			return false
-		}
-		return true
-	})
+	return ctx.events.WebSocketFrames(urlFilter, direction)
 }
 
 // ClearWebSocketData clears all WebSocket connections and frames.
 func (ctx *Context) ClearWebSocketData() {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
-	ctx.wsConnections.Clear()
-	ctx.wsConnIndex = nil
-	ctx.wsFrames.Clear()
+	ctx.events.ClearWebSocketData()
 }
