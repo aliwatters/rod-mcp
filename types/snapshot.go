@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
 	"gopkg.in/yaml.v3"
 
@@ -168,27 +169,37 @@ func (s *Snapshot) walkScalarNode(node *yaml.Node, frameIndex int, frame *rod.Pa
 	if node.Tag != "!!str" {
 		return node, nil
 	}
+	s.adjustFrameRef(node, frameIndex)
+	if result := s.tryExpandIframe(node, frame); result != nil {
+		return result, nil
+	}
+	s.accumulateRef(node.Value)
+	return node, nil
+}
 
-	value := node.Value
+// adjustFrameRef prefixes element refs with the frame index for cross-frame disambiguation.
+func (s *Snapshot) adjustFrameRef(node *yaml.Node, frameIndex int) {
 	if frameIndex > 0 {
-		node.Value = strings.Replace(value, "[ref=", fmt.Sprintf("[ref=f%d", frameIndex), 1)
+		node.Value = strings.Replace(node.Value, "[ref=", fmt.Sprintf("[ref=f%d", frameIndex), 1)
 	}
+}
 
-	if strings.HasPrefix(value, "iframe ") {
-		if result := s.walkIframeNode(node, frame); result != nil {
-			return result, nil
-		}
+// tryExpandIframe captures an iframe's snapshot inline if the node represents an iframe.
+// Returns the expanded node, or nil if the node is not an iframe.
+func (s *Snapshot) tryExpandIframe(node *yaml.Node, frame *rod.Page) *yaml.Node {
+	if strings.HasPrefix(node.Value, "iframe ") {
+		return s.walkIframeNode(node, frame)
 	}
+	return nil
+}
 
-	// Accumulate ref index entries during the walk (avoids a separate tree pass).
+// accumulateRef adds a ref index entry if the node value contains a ref pattern.
+func (s *Snapshot) accumulateRef(value string) {
 	if s.refAccum != nil {
-		effectiveValue := node.Value
-		if entry, ok := parseRefScalar(effectiveValue); ok {
+		if entry, ok := parseRefScalar(value); ok {
 			*s.refAccum = append(*s.refAccum, entry)
 		}
 	}
-
-	return node, nil
 }
 
 // walkIframeNode captures an iframe's snapshot and returns a mapping node with the result.
@@ -208,14 +219,19 @@ func (s *Snapshot) walkIframeNode(node *yaml.Node, frame *rod.Page) *yaml.Node {
 
 	childFrameEle, err := utils.QueryEleByAria(frame, ref)
 	if err != nil {
+		log.Debugf("walkIframeNode: query element for ref %q: %s", ref, err)
 		return pairNode
 	}
 	childFrame, err := childFrameEle.Frame()
 	if err != nil {
+		log.Debugf("walkIframeNode: get frame for ref %q: %s", ref, err)
 		return pairNode
 	}
 	childSnapshot, err := s.captureSnapshotWithFrames(childFrame)
 	if err != nil || len(childSnapshot.Content) == 0 {
+		if err != nil {
+			log.Debugf("walkIframeNode: capture snapshot for ref %q: %s", ref, err)
+		}
 		return pairNode
 	}
 

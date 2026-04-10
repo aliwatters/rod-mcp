@@ -83,11 +83,14 @@ var (
 				return toolErr("set geolocation", setErr)
 			}
 
-			out, _ := json.MarshalIndent(map[string]interface{}{
+			out, marshalErr := json.MarshalIndent(map[string]interface{}{
 				"latitude":  lat,
 				"longitude": lng,
 				"accuracy":  accuracy,
 			}, "", "  ")
+			if marshalErr != nil {
+				return toolErr("marshal geolocation result", marshalErr)
+			}
 			return mcp.NewToolResultText(fmt.Sprintf("Geolocation set:\n%s", string(out))), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})

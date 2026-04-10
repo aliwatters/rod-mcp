@@ -52,6 +52,13 @@ type Config struct {
 	// "allow" (default): saves file and includes inline base64 ImageContent.
 	// "omit": saves file only, returns just the file path (saves tokens).
 	ImageResponses ImageResponsesMode `yaml:"imageResponses" json:"imageResponses"`
+	// LoginUsernameSelectors overrides the default username field selectors tried during login.
+	// If empty, the built-in defaults are used (input[type=email], input[name=email], etc.).
+	LoginUsernameSelectors []string `yaml:"loginUsernameSelectors" json:"loginUsernameSelectors"`
+	// LoginPasswordSelector overrides the default password field selector (input[type=password]).
+	LoginPasswordSelector string `yaml:"loginPasswordSelector" json:"loginPasswordSelector"`
+	// LoginSubmitSelector overrides the default submit button selector (button[type=submit]).
+	LoginSubmitSelector string `yaml:"loginSubmitSelector" json:"loginSubmitSelector"`
 }
 
 var (
