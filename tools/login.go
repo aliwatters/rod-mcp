@@ -19,8 +19,6 @@ import (
 
 const (
 	LoginToolKey = "rod_login"
-
-	defaultLoginTimeoutMs = 15000.0
 )
 
 var (
