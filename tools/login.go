@@ -280,18 +280,22 @@ var (
 			}
 		done:
 
-			info, _ := page.Info()
+			info, infoErr := page.Info()
 			currentURL := ""
 			title := ""
-			if info != nil {
+			if infoErr != nil {
+				log.Warnf("login page info: %s", infoErr)
+			} else if info != nil {
 				currentURL = info.URL
 				title = info.Title
 			}
 
 			// Count cookies set
-			resp, _ := proto.NetworkGetCookies{}.Call(page)
+			resp, cookieErr := proto.NetworkGetCookies{}.Call(page)
 			cookieCount := 0
-			if resp != nil {
+			if cookieErr != nil {
+				log.Warnf("login get cookies: %s", cookieErr)
+			} else if resp != nil {
 				cookieCount = len(resp.Cookies)
 			}
 
@@ -305,7 +309,10 @@ var (
 				result["error"] = fmt.Sprintf("login verification timed out after %dms", int(timeout))
 			}
 
-			out, _ := json.MarshalIndent(result, "", "  ")
+			out, marshalErr := json.MarshalIndent(result, "", "  ")
+			if marshalErr != nil {
+				return toolErr("login marshal result", marshalErr)
+			}
 			return mcp.NewToolResultText(string(out)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})

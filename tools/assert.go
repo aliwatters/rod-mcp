@@ -123,7 +123,10 @@ var (
 				}
 			}
 
-			out, _ := json.MarshalIndent(result, "", "  ")
+			out, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return toolErr("marshal assert result", err)
+			}
 
 			if wantScreenshot {
 				bin, shotErr := page.Screenshot(false, &proto.PageCaptureScreenshot{

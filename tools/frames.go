@@ -70,7 +70,10 @@ var (
 				"hint":   "Use ref-based targeting with frame prefix (e.g. f0e42 for element e42 in frame 0) to interact with elements inside iframes",
 			}
 
-			out, _ := json.MarshalIndent(result, "", "  ")
+			out, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return toolErr("marshal frame list result", err)
+			}
 			return mcp.NewToolResultText(string(out)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})

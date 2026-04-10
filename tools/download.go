@@ -137,12 +137,15 @@ var (
 				fileSize = stat.Size()
 			}
 
-			out, _ := json.MarshalIndent(map[string]interface{}{
+			out, err := json.MarshalIndent(map[string]interface{}{
 				"filename":    result.filename,
 				"path":        finalPath,
 				"size_bytes":  fileSize,
 				"download_url": result.url,
 			}, "", "  ")
+			if err != nil {
+				return toolErr("marshal download result", err)
+			}
 			return mcp.NewToolResultText(string(out)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})

@@ -123,11 +123,14 @@ var (
 				})
 			}
 
-			out, _ := json.MarshalIndent(map[string]interface{}{
+			out, marshalErr := json.MarshalIndent(map[string]interface{}{
 				"total":     len(actionsArr),
 				"completed": len(results),
 				"results":   results,
 			}, "", "  ")
+			if marshalErr != nil {
+				return toolErr("marshal batch result", marshalErr)
+			}
 			return mcp.NewToolResultText(string(out)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: true})

@@ -120,7 +120,10 @@ var (
 				result["diff_image_path"] = diffPath
 			}
 
-			out, _ := json.MarshalIndent(result, "", "  ")
+			out, err := json.MarshalIndent(result, "", "  ")
+			if err != nil {
+				return toolErr("marshal compare result", err)
+			}
 			return mcp.NewToolResultText(string(out)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
