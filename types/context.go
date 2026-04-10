@@ -129,19 +129,19 @@ func (ctx *Context) initLocked() error {
 	if ctx.browser == nil {
 		ctx.browser, ctx.clonedProfileDir, err = launchBrowser(ctx.stdContext, ctx.config)
 		if err != nil {
-			return err
+			return fmt.Errorf("launch browser: %w", err)
 		}
 		ctx.startKeepalive()
 		ctx.page, err = ctx.createPage()
 		if err != nil {
-			return err
+			return fmt.Errorf("create initial page: %w", err)
 		}
 		return nil
 	}
 	if ctx.page == nil {
 		ctx.page, err = ctx.createPage()
 		if err != nil {
-			return err
+			return fmt.Errorf("create page: %w", err)
 		}
 	}
 
@@ -285,7 +285,7 @@ func (ctx *Context) closeBrowser() error {
 
 	err := ctx.closePage()
 	if err != nil {
-		return err
+		return fmt.Errorf("close browser: %w", err)
 	}
 
 	if ctx.browser == nil {
