@@ -31,6 +31,9 @@ const (
 	// defaultLoginTimeoutMs is the default timeout for login success verification in milliseconds.
 	defaultLoginTimeoutMs = 15000.0
 
+	// defaultFormContainerTimeout is the max time to wait for a modal form container to appear.
+	defaultFormContainerTimeout = 5 * time.Second
+
 	// dragStepDelay is the pause between mouse-move steps during drag operations.
 	dragStepDelay = 10 * time.Millisecond
 )

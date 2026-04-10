@@ -195,7 +195,7 @@ func loginOpenTrigger(page *rod.Page, triggerSelector, formContainer string) err
 	if err := triggerEl.Click(proto.InputMouseButtonLeft, 1); err != nil {
 		return fmt.Errorf("click trigger: %w", err)
 	}
-	if _, err := page.Timeout(5 * time.Second).Element(formContainer); err != nil {
+	if _, err := page.Timeout(defaultFormContainerTimeout).Element(formContainer); err != nil {
 		return fmt.Errorf("form container %q did not appear after clicking trigger: %w", formContainer, err)
 	}
 	waitDOMStable(page)
@@ -242,7 +242,7 @@ func loginBuildResult(page *rod.Page, verified bool, timeout float64) (string, e
 	currentURL := ""
 	title := ""
 	if infoErr != nil {
-		log.Warnf("login page info: %s", infoErr)
+		log.Debugf("login page info: %s", infoErr)
 	} else if info != nil {
 		currentURL = info.URL
 		title = info.Title
@@ -251,7 +251,7 @@ func loginBuildResult(page *rod.Page, verified bool, timeout float64) (string, e
 	resp, cookieErr := proto.NetworkGetCookies{}.Call(page)
 	cookieCount := 0
 	if cookieErr != nil {
-		log.Warnf("login get cookies: %s", cookieErr)
+		log.Debugf("login get cookies: %s", cookieErr)
 	} else if resp != nil {
 		cookieCount = len(resp.Cookies)
 	}
