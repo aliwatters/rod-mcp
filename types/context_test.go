@@ -38,13 +38,16 @@ func TestNewContext_InitialState(t *testing.T) {
 	if ctx.snapshot != nil {
 		t.Error("snapshot should be nil on creation")
 	}
-	if ctx.consoleMessages == nil {
+	if ctx.events == nil {
+		t.Error("events collector should be initialized")
+	}
+	if ctx.events.consoleMessages == nil {
 		t.Error("consoleMessages ring buffer should be initialized")
 	}
-	if ctx.networkRequests == nil {
+	if ctx.events.networkRequests == nil {
 		t.Error("networkRequests ring buffer should be initialized")
 	}
-	if ctx.wsFrames == nil {
+	if ctx.events.wsFrames == nil {
 		t.Error("wsFrames ring buffer should be initialized")
 	}
 }

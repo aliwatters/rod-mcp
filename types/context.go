@@ -40,32 +40,19 @@ const (
 )
 
 type Context struct {
-	stdContext       context.Context
-	config          Config
-	browser         *rod.Browser
-	page            *rod.Page
+	stdContext context.Context
+	config     Config
+	browser    *rod.Browser
+	page       *rod.Page
 	// pageCancel cancels event-listener goroutines attached to the current page.
 	// It is set when attachEventListeners creates a cancelable page copy, and
 	// called in closePage before the page is closed.
-	pageCancel      func()
-	stateLock       sync.Mutex
-	snapshot        *Snapshot
-	mode            Mode
-	consoleMessages *RingBuffer[ConsoleMessage]
-	networkRequests *RingBuffer[NetworkRequest]
-	// pendingRequests tracks in-flight requests by ID for response correlation.
-	// Values are indices into the networkRequests ring buffer's internal items slice;
-	// they remain valid because the ring buffer never shifts elements.
-	pendingRequests map[string]int
-	// Intercept state
-	interceptRules   []InterceptRule
-	interceptEnabled bool
-	// interceptCancel cancels the EachEvent goroutine started by interceptEnable.
-	interceptCancel func()
-	// WebSocket tracking
-	wsConnections *RingBuffer[WebSocketConnection]
-	wsConnIndex   map[string]int // requestID → internal ring-buffer index in wsConnections
-	wsFrames      *RingBuffer[WebSocketFrame]
+	pageCancel func()
+	stateLock  sync.Mutex
+	snapshot   *Snapshot
+	mode       Mode
+	events     *EventCollector
+	intercept  *NetworkInterceptor
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
 	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
@@ -74,13 +61,11 @@ type Context struct {
 
 func NewContext(ctx context.Context, cfg Config) *Context {
 	return &Context{
-		stdContext:      ctx,
-		config:          cfg,
-		mode:            cfg.Mode,
-		consoleMessages: NewRingBuffer[ConsoleMessage](maxConsoleMessages),
-		networkRequests: NewRingBuffer[NetworkRequest](maxNetworkRequests),
-		wsConnections:   NewRingBuffer[WebSocketConnection](maxWSConnections),
-		wsFrames:        NewRingBuffer[WebSocketFrame](maxWSFrames),
+		stdContext: ctx,
+		config:     cfg,
+		mode:       cfg.Mode,
+		events:     NewEventCollector(),
+		intercept:  NewNetworkInterceptor(),
 	}
 }
 
@@ -264,10 +249,7 @@ func (ctx *Context) closePage() error {
 		ctx.pageCancel = nil
 	}
 	// Cancel any intercept listener goroutine as well.
-	if ctx.interceptCancel != nil {
-		ctx.interceptCancel()
-		ctx.interceptCancel = nil
-	}
+	ctx.intercept.Cancel()
 	err := ctx.page.Close()
 	if err != nil {
 		return fmt.Errorf("close page: %w", err)
