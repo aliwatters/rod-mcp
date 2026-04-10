@@ -352,8 +352,22 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		return nil, fmt.Errorf("inject snapshot script: %w", err)
 	}
 
-	// Apply HTTP headers from config (global + domain-specific)
+	// Inject stealth patches before any page JS runs.
+	if ctx.config.Stealth {
+		if _, err := page.EvalOnNewDocument(js.StealthJS); err != nil {
+			return nil, fmt.Errorf("inject stealth script: %w", err)
+		}
+		log.Debugf("stealth mode: injected anti-detection script on new page")
+	}
+
+	// When stealth is enabled, auto-set a realistic User-Agent and Sec-CH-UA
+	// header matching the running Chrome version, unless the user already
+	// configured those headers.
 	allHeaders := ctx.config.GetHeadersForURL(targetURL)
+	if ctx.config.Stealth {
+		allHeaders = ctx.applyStealthHeaders(allHeaders)
+	}
+
 	if len(allHeaders) > 0 {
 		if _, err := page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
 			return nil, fmt.Errorf("set extra HTTP headers: %w", err)
@@ -366,6 +380,69 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	return page, nil
 }
 
+// applyStealthHeaders sets realistic User-Agent and Sec-CH-UA headers derived
+// from the running Chrome version. Existing user-configured headers take
+// precedence — stealth only fills in missing values.
+func (ctx *Context) applyStealthHeaders(headers map[string]string) map[string]string {
+	if headers == nil {
+		headers = make(map[string]string)
+	}
+
+	// Fetch the Chrome version from the running browser.
+	chromeVersion := ctx.chromeVersion()
+
+	// Only set User-Agent if not already configured.
+	if _, ok := headers["User-Agent"]; !ok {
+		if chromeVersion != "" {
+			headers["User-Agent"] = fmt.Sprintf(
+				"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36",
+				chromeVersion,
+			)
+		}
+	}
+
+	// Only set Sec-CH-UA if not already configured.
+	if _, ok := headers["Sec-CH-UA"]; !ok {
+		major := chromeMajorVersion(chromeVersion)
+		if major != "" {
+			headers["Sec-CH-UA"] = fmt.Sprintf(`"Chromium";v="%s", "Google Chrome";v="%s", "Not-A.Brand";v="99"`, major, major)
+		}
+	}
+
+	return headers
+}
+
+// chromeVersion returns the full Chrome version string (e.g. "124.0.6367.91")
+// from the running browser, or an empty string if unavailable.
+func (ctx *Context) chromeVersion() string {
+	if ctx.browser == nil {
+		return ""
+	}
+	res, err := proto.BrowserGetVersion{}.Call(ctx.browser)
+	if err != nil {
+		log.Debugf("stealth: failed to get browser version: %s", err)
+		return ""
+	}
+	// Product is typically "Chrome/124.0.6367.91" or "HeadlessChrome/124..."
+	product := res.Product
+	if idx := strings.Index(product, "/"); idx >= 0 {
+		return product[idx+1:]
+	}
+	return product
+}
+
+// chromeMajorVersion extracts the major version number from a full Chrome
+// version string (e.g. "124.0.6367.91" → "124").
+func chromeMajorVersion(version string) string {
+	if version == "" {
+		return ""
+	}
+	if idx := strings.Index(version, "."); idx > 0 {
+		return version[:idx]
+	}
+	return version
+}
+
 // UpdateHeadersForURL updates the extra HTTP headers on the current page based on the target URL.
 // This should be called before navigating to a new domain to ensure domain-specific headers are applied.
 func (ctx *Context) UpdateHeadersForURL(url string) error {
@@ -374,6 +451,9 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 	}
 
 	allHeaders := ctx.config.GetHeadersForURL(url)
+	if ctx.config.Stealth {
+		allHeaders = ctx.applyStealthHeaders(allHeaders)
+	}
 	if len(allHeaders) > 0 {
 		if _, err := ctx.page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
 			return fmt.Errorf("set extra HTTP headers: %w", err)
@@ -385,7 +465,7 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 // Reconfigure updates browser settings and closes any running browser so the
 // next tool call reinitializes with the new configuration.  Pass nil for any
 // field to leave it unchanged.
-func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string) error {
+func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string, stealth *bool) error {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
 
@@ -394,6 +474,9 @@ func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string) error {
 	}
 	if cdpEndpoint != nil {
 		ctx.config.CDPEndpoint = *cdpEndpoint
+	}
+	if stealth != nil {
+		ctx.config.Stealth = *stealth
 	}
 
 	// Close existing browser so the next initial() picks up new config.
