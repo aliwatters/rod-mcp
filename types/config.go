@@ -59,6 +59,10 @@ type Config struct {
 	LoginPasswordSelector string `yaml:"loginPasswordSelector" json:"loginPasswordSelector"`
 	// LoginSubmitSelector overrides the default submit button selector (button[type=submit]).
 	LoginSubmitSelector string `yaml:"loginSubmitSelector" json:"loginSubmitSelector"`
+	// Stealth enables anti-bot-detection measures: removes automation indicators,
+	// patches navigator.webdriver, injects realistic browser fingerprints, and sets
+	// a realistic User-Agent header. Useful for automating sites with bot detection.
+	Stealth bool `yaml:"stealth" json:"stealth"`
 }
 
 var (

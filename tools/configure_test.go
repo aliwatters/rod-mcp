@@ -23,10 +23,13 @@ func TestConfigureToolDefinition(t *testing.T) {
 	if _, ok := props["cdp_endpoint"]; !ok {
 		t.Error("Configure tool missing 'cdp_endpoint' property")
 	}
+	if _, ok := props["stealth"]; !ok {
+		t.Error("Configure tool missing 'stealth' property")
+	}
 
-	// headless and cdp_endpoint should be optional (not required)
+	// headless, cdp_endpoint, and stealth should be optional (not required)
 	for _, r := range Configure.InputSchema.Required {
-		if r == "headless" || r == "cdp_endpoint" {
+		if r == "headless" || r == "cdp_endpoint" || r == "stealth" {
 			t.Errorf("Configure tool parameter %q should not be required", r)
 		}
 	}
@@ -146,6 +149,32 @@ func TestConfigureHandlerClearCDPEndpoint(t *testing.T) {
 
 	if rodCtx.Config().CDPEndpoint != "" {
 		t.Errorf("expected CDPEndpoint to be cleared, got %q", rodCtx.Config().CDPEndpoint)
+	}
+}
+
+func TestConfigureHandlerStealth(t *testing.T) {
+	cfg := types.DefaultConfig
+	cfg.Stealth = false
+	rodCtx := types.NewContext(context.Background(), cfg)
+	defer rodCtx.Close()
+
+	handler := ConfigureHandler(rodCtx)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]interface{}{
+		"stealth": true,
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := result.Content[0].(mcp.TextContent).Text
+	if text != "Browser configured: stealth=true. Changes take effect on next browser action." {
+		t.Errorf("unexpected result text: %s", text)
+	}
+
+	if !rodCtx.Config().Stealth {
+		t.Error("expected Stealth to be true after reconfigure")
 	}
 }
 

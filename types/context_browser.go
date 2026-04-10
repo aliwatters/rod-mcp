@@ -145,6 +145,14 @@ func configureLauncher(ctx context.Context, cfg Config, userDataDir string) (*la
 		l.Proxy(cfg.Proxy)
 	}
 
+	if cfg.Stealth {
+		// Remove the automation indicator flag that Chromium sets by default.
+		l.Delete("enable-automation")
+		// Disable the Blink feature that exposes navigator.webdriver = true.
+		l.Set("disable-blink-features", "AutomationControlled")
+		log.Debugf("stealth mode: applied anti-detection launch flags")
+	}
+
 	return l, nil
 }
 

@@ -17,6 +17,7 @@ var Configure = mcp.NewTool(ConfigureToolKey,
 	mcp.WithDescription("Configure browser settings. If the browser is already running it will be closed and restarted with the new settings on the next tool call."),
 	mcp.WithBoolean("headless", mcp.Description("Run the browser in headless mode (true) or with a visible GUI (false)")),
 	mcp.WithString("cdp_endpoint", mcp.Description("Connect to an existing Chrome instance via CDP endpoint URL (e.g. http://127.0.0.1:9222)")),
+	mcp.WithBoolean("stealth", mcp.Description("Enable stealth mode to bypass bot detection. Removes automation indicators, patches navigator.webdriver, injects realistic browser fingerprints, and sets a realistic User-Agent header.")),
 )
 
 var ConfigureHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
@@ -33,7 +34,12 @@ var ConfigureHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 			cdpEndpoint = &v
 		}
 
-		if err := rodCtx.Reconfigure(headless, cdpEndpoint); err != nil {
+		var stealth *bool
+		if v, ok := args["stealth"].(bool); ok {
+			stealth = &v
+		}
+
+		if err := rodCtx.Reconfigure(headless, cdpEndpoint, stealth); err != nil {
 			return toolErr("configure browser", err)
 		}
 
@@ -47,6 +53,9 @@ var ConfigureHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 			} else {
 				parts = append(parts, fmt.Sprintf("cdp_endpoint=%s", *cdpEndpoint))
 			}
+		}
+		if stealth != nil {
+			parts = append(parts, fmt.Sprintf("stealth=%t", *stealth))
 		}
 		if len(parts) == 0 {
 			return mcp.NewToolResultText("No configuration changes requested"), nil
