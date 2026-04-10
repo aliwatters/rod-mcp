@@ -84,7 +84,8 @@ type loginParams struct {
 }
 
 // parseLoginParams extracts and defaults login parameters from the MCP request.
-func parseLoginParams(args map[string]interface{}) (loginParams, error) {
+// Config-level defaults are used when the request doesn't specify selectors.
+func parseLoginParams(args map[string]interface{}, cfg types.Config) (loginParams, error) {
 	loginURL, err := getStringArg(args, "url")
 	if err != nil {
 		return loginParams{}, err
@@ -113,7 +114,13 @@ func parseLoginParams(args map[string]interface{}) (loginParams, error) {
 	}
 
 	if p.passSelector == "" {
+		p.passSelector = cfg.LoginPasswordSelector
+	}
+	if p.passSelector == "" {
 		p.passSelector = "input[type=password]"
+	}
+	if p.submitSelector == "" {
+		p.submitSelector = cfg.LoginSubmitSelector
 	}
 	if p.submitSelector == "" {
 		p.submitSelector = "button[type=submit]"
@@ -125,8 +132,8 @@ func parseLoginParams(args map[string]interface{}) (loginParams, error) {
 }
 
 // loginFillUsername finds and fills the username field on the page.
-// If userSelector is empty, tries defaultUsernameSelectors with optional scope prefix.
-func loginFillUsername(page *rod.Page, username, userSelector, scope string) error {
+// If userSelector is empty, tries the provided selectors (or defaults) with optional scope prefix.
+func loginFillUsername(page *rod.Page, username, userSelector, scope string, selectors []string) error {
 	if userSelector != "" {
 		el, err := page.Element(userSelector)
 		if err != nil {
@@ -135,7 +142,10 @@ func loginFillUsername(page *rod.Page, username, userSelector, scope string) err
 		return loginSmartFill(el, username)
 	}
 
-	for _, sel := range defaultUsernameSelectors {
+	if len(selectors) == 0 {
+		selectors = defaultUsernameSelectors
+	}
+	for _, sel := range selectors {
 		if scope != "" {
 			sel = scope + " " + sel
 		}
@@ -266,7 +276,8 @@ func loginBuildResult(page *rod.Page, verified bool, timeout float64) (string, e
 var (
 	LoginHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			p, err := parseLoginParams(request.GetArguments())
+			cfg := rodCtx.Config()
+			p, err := parseLoginParams(request.GetArguments(), cfg)
 			if err != nil {
 				return toolErr("login", err)
 			}
@@ -302,7 +313,7 @@ var (
 				scope = p.formContainer
 			}
 
-			if err := loginFillUsername(page, p.username, p.userSelector, scope); err != nil {
+			if err := loginFillUsername(page, p.username, p.userSelector, scope, cfg.LoginUsernameSelectors); err != nil {
 				return toolErr("login fill username", err)
 			}
 			if err := loginFillPassword(page, p.password, p.passSelector, scope); err != nil {
