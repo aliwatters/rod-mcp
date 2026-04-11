@@ -62,7 +62,7 @@ type Config struct {
 	// Stealth enables anti-bot-detection measures: removes automation indicators,
 	// patches navigator.webdriver, injects realistic browser fingerprints, and sets
 	// a realistic User-Agent header. Useful for automating sites with bot detection.
-	// EXPERIMENTAL: behavior may change between releases.
+	// [EXPERIMENTAL] behavior may change between releases.
 	Stealth bool `yaml:"stealth" json:"stealth"`
 }
 

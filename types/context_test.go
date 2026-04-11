@@ -344,6 +344,27 @@ func TestApplyStealthHeaders_PreservesExistingHeaders(t *testing.T) {
 	}
 }
 
+func TestApplyStealthHeaders_CaseInsensitiveLookup(t *testing.T) {
+	ctx := newTestContext()
+	ctx.config.Stealth = true
+
+	// Lower-case header keys should still prevent stealth from adding duplicates.
+	existing := map[string]string{
+		"user-agent": "CustomAgent/1.0",
+		"sec-ch-ua":  `"Custom";v="1"`,
+	}
+	headers := ctx.applyStealthHeaders(existing)
+	if len(headers) != 2 {
+		t.Errorf("expected 2 headers, got %d: %v", len(headers), headers)
+	}
+	if headers["user-agent"] != "CustomAgent/1.0" {
+		t.Errorf("user-agent was overwritten: %q", headers["user-agent"])
+	}
+	if headers["sec-ch-ua"] != `"Custom";v="1"` {
+		t.Errorf("sec-ch-ua was overwritten: %q", headers["sec-ch-ua"])
+	}
+}
+
 func TestReconfigure_Stealth(t *testing.T) {
 	ctx := newTestContext()
 	ctx.config.Stealth = false
