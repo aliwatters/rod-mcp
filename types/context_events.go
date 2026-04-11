@@ -92,29 +92,23 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameSent) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
-				conn.SentCount++
-				ctx.events.AppendWSFrame(conn.URL, "sent", e.Response)
-			})
-		}
+		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
+			conn.SentCount++
+			ctx.events.AppendWSFrame(conn.URL, "sent", e.Response)
+		})
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameReceived) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
-				conn.ReceivedCount++
-				ctx.events.AppendWSFrame(conn.URL, "received", e.Response)
-			})
-		}
+		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
+			conn.ReceivedCount++
+			ctx.events.AppendWSFrame(conn.URL, "received", e.Response)
+		})
 		ctx.stateLock.Unlock()
 	}, func(e *proto.NetworkWebSocketClosed) {
 		ctx.stateLock.Lock()
-		if idx, ok := ctx.events.wsConnIndex[string(e.RequestID)]; ok {
-			ctx.events.wsConnections.UpdateAt(idx, func(conn *WebSocketConnection) {
-				conn.Closed = true
-			})
-		}
+		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
+			conn.Closed = true
+		})
 		ctx.stateLock.Unlock()
 	})()
 

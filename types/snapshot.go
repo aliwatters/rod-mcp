@@ -211,6 +211,12 @@ func (s *Snapshot) walkIframeNode(node *yaml.Node, frame *rod.Page) *yaml.Node {
 	}
 
 	ref := matches[1]
+	// Strip optional frame prefix (e.g. "f1e42" → "e42") that adjustFrameRef
+	// may have added before tryExpandIframe is called. The DOM element still
+	// has the original unprefixed ref.
+	if fm := iframeRefPattern.FindStringSubmatch(ref); len(fm) > 0 {
+		ref = fm[2]
+	}
 	fallback := &yaml.Node{Kind: yaml.ScalarNode, Value: "<could not capture iframe snapshot>"}
 	pairNode := &yaml.Node{
 		Kind:    yaml.MappingNode,

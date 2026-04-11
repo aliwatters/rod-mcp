@@ -150,7 +150,7 @@ func configureLauncher(ctx context.Context, cfg Config, userDataDir string) (*la
 		l.Delete("enable-automation")
 		// Disable the Blink feature that exposes navigator.webdriver = true.
 		l.Set("disable-blink-features", "AutomationControlled")
-		log.Warnf("experimental feature enabled: stealth mode — behavior may change between releases")
+		log.Infof("[EXPERIMENTAL] stealth mode enabled — behavior may change between releases")
 	}
 
 	return l, nil

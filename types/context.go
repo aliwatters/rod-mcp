@@ -51,8 +51,8 @@ type Context struct {
 	stateLock  sync.Mutex
 	snapshot   *Snapshot
 	mode       Mode
-	events     *EventCollector
-	intercept  *NetworkInterceptor
+	events     *eventCollector
+	intercept  *networkInterceptor
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
 	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
@@ -64,8 +64,8 @@ func NewContext(ctx context.Context, cfg Config) *Context {
 		stdContext: ctx,
 		config:     cfg,
 		mode:       cfg.Mode,
-		events:     NewEventCollector(),
-		intercept:  NewNetworkInterceptor(),
+		events:     newEventCollector(),
+		intercept:  newNetworkInterceptor(),
 	}
 }
 
@@ -373,8 +373,9 @@ func (ctx *Context) applyStealthHeaders(headers map[string]string) map[string]st
 	// Fetch the Chrome version from the running browser.
 	chromeVersion := ctx.chromeVersion()
 
-	// Only set User-Agent if not already configured.
-	if _, ok := headers["User-Agent"]; !ok {
+	// Only set User-Agent if not already configured (case-insensitive check
+	// since HTTP header names are case-insensitive).
+	if !headerExists(headers, "User-Agent") {
 		if chromeVersion != "" {
 			headers["User-Agent"] = fmt.Sprintf(
 				"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Safari/537.36",
@@ -383,8 +384,8 @@ func (ctx *Context) applyStealthHeaders(headers map[string]string) map[string]st
 		}
 	}
 
-	// Only set Sec-CH-UA if not already configured.
-	if _, ok := headers["Sec-CH-UA"]; !ok {
+	// Only set Sec-CH-UA if not already configured (case-insensitive).
+	if !headerExists(headers, "Sec-CH-UA") {
 		major := chromeMajorVersion(chromeVersion)
 		if major != "" {
 			headers["Sec-CH-UA"] = fmt.Sprintf(`"Chromium";v="%s", "Google Chrome";v="%s", "Not-A.Brand";v="99"`, major, major)
@@ -411,6 +412,17 @@ func (ctx *Context) chromeVersion() string {
 		return product[idx+1:]
 	}
 	return product
+}
+
+// headerExists checks whether a header name is present in the map using a
+// case-insensitive comparison, since HTTP header names are case-insensitive.
+func headerExists(headers map[string]string, name string) bool {
+	for k := range headers {
+		if strings.EqualFold(k, name) {
+			return true
+		}
+	}
+	return false
 }
 
 // chromeMajorVersion extracts the major version number from a full Chrome
