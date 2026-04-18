@@ -202,36 +202,56 @@ func loginOpenTrigger(page *rod.Page, triggerSelector, formContainer string) err
 	return nil
 }
 
-// loginVerifySuccess polls for success indicators until timeout.
-func loginVerifySuccess(page *rod.Page, successSelector, successURL string, timeout float64) bool {
+// loginVerifySuccess polls for success indicators until the user-provided timeout expires
+// or the context is cancelled. All rod calls are wrapped with the remaining timeout so
+// that page.Element() and page.Info() cannot hang longer than the budget.
+func loginVerifySuccess(ctx context.Context, page *rod.Page, successSelector, successURL string, timeout float64) bool {
 	if successSelector == "" && successURL == "" {
-		if navErr := page.WaitLoad(); navErr == nil {
+		// No success indicator specified — just wait for the page load.
+		// Use a short bounded timeout rather than rod's default so we don't hang.
+		shortTimeout := time.Duration(timeout) * time.Millisecond
+		if navErr := page.Timeout(shortTimeout).WaitLoad(); navErr == nil {
 			waitDOMStable(page)
 		}
 		return true
 	}
 
 	timeoutDur := time.Duration(timeout) * time.Millisecond
-	deadline := time.After(timeoutDur)
+	deadline := time.Now().Add(timeoutDur)
 	ticker := time.NewTicker(300 * time.Millisecond)
 	defer ticker.Stop()
 
 	for {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return false
+		}
+
+		// Use a short probe timeout per check — at most 500ms or remaining budget,
+		// whichever is smaller. This keeps each individual rod call bounded.
+		probeTimeout := 500 * time.Millisecond
+		if remaining < probeTimeout {
+			probeTimeout = remaining
+		}
+
 		if successSelector != "" {
-			if _, err := page.Element(successSelector); err == nil {
+			if _, err := page.Timeout(probeTimeout).Element(successSelector); err == nil {
 				return true
 			}
 		}
 		if successURL != "" {
-			if info, err := page.Info(); err == nil && strings.Contains(info.URL, successURL) {
+			if info, err := page.Timeout(probeTimeout).Info(); err == nil && strings.Contains(info.URL, successURL) {
 				return true
 			}
 		}
+
 		select {
-		case <-deadline:
+		case <-ctx.Done():
 			return false
 		case <-ticker.C:
 			continue
+		case <-time.After(remaining):
+			return false
 		}
 	}
 }
@@ -323,8 +343,8 @@ var (
 				return toolErr("login submit", err)
 			}
 
-			// Step 3: Verify success
-			verified := loginVerifySuccess(page, p.successSelector, p.successURL, p.timeout)
+			// Step 3: Verify success — pass ctx so cancellation is respected.
+			verified := loginVerifySuccess(ctx, page, p.successSelector, p.successURL, p.timeout)
 
 			// Step 4: Build result
 			out, err := loginBuildResult(page, verified, p.timeout)
