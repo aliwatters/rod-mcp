@@ -184,6 +184,12 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 func (ctx *Context) BuildSnapshot() (string, error) {
 	ctx.stateLock.Lock()
 	defer ctx.stateLock.Unlock()
+	return ctx.buildSnapshotLocked()
+}
+
+// buildSnapshotLocked builds a fresh snapshot and stores it.
+// Must be called with stateLock held.
+func (ctx *Context) buildSnapshotLocked() (string, error) {
 	if ctx.page == nil {
 		return "", errors.New("no active tab, call rod_navigate first")
 	}
@@ -214,21 +220,18 @@ func (ctx *Context) InvalidateSnapshot() {
 }
 
 // EnsureSnapshot returns the latest snapshot, building one if none exists.
+// The check-then-build is performed atomically under stateLock to eliminate
+// the TOCTOU window that existed when lock was released between the nil check
+// and the build call.
 func (ctx *Context) EnsureSnapshot() (*Snapshot, error) {
 	ctx.stateLock.Lock()
+	defer ctx.stateLock.Unlock()
 	if ctx.snapshot != nil {
-		s := ctx.snapshot
-		ctx.stateLock.Unlock()
-		return s, nil
+		return ctx.snapshot, nil
 	}
-	ctx.stateLock.Unlock()
-
-	// Build a new snapshot (BuildSnapshot acquires stateLock internally).
-	if _, err := ctx.BuildSnapshot(); err != nil {
+	if _, err := ctx.buildSnapshotLocked(); err != nil {
 		return nil, err
 	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
 	return ctx.snapshot, nil
 }
 
