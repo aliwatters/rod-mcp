@@ -41,22 +41,42 @@ const (
 
 type Context struct {
 	stdContext context.Context
-	config     Config
-	browser    *rod.Browser
-	page       *rod.Page
+
+	// browserLock serialises access to all browser-lifecycle fields:
+	// browser, page, pageCancel, keepaliveCancel, clonedProfileDir, and config.
+	browserLock      sync.Mutex
+	config           Config
+	browser          *rod.Browser
+	page             *rod.Page
 	// pageCancel cancels event-listener goroutines attached to the current page.
 	// It is set when attachEventListeners creates a cancelable page copy, and
 	// called in closePage before the page is closed.
-	pageCancel func()
-	stateLock  sync.Mutex
-	snapshot   *Snapshot
-	mode       Mode
-	events     *eventCollector
-	intercept  *networkInterceptor
+	pageCancel       func()
+	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
+	keepaliveCancel  func()
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
-	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
-	keepaliveCancel func()
+
+	// snapshotLock serialises access to the cached ARIA snapshot.
+	// Lock ordering: always acquire snapshotLock before browserLock if both are
+	// needed (EnsureSnapshot reads page under a brief browserLock while holding
+	// snapshotLock).
+	snapshotLock sync.Mutex
+	snapshot     *Snapshot
+
+	// eventsLock serialises access to the event collector (console messages,
+	// network requests, WebSocket frames). Kept separate from browserLock so
+	// event listener goroutines do not contend with browser lifecycle operations.
+	eventsLock sync.Mutex
+	events     *eventCollector
+
+	mode Mode
+
+	// interceptLock serialises access to the network interceptor state.
+	// Kept separate from browserLock to allow intercept configuration without
+	// contending with browser lifecycle operations.
+	interceptLock sync.Mutex
+	intercept     *networkInterceptor
 }
 
 func NewContext(ctx context.Context, cfg Config) *Context {
@@ -77,8 +97,8 @@ func (ctx *Context) EnsurePage() (*rod.Page, error) {
 }
 
 func (ctx *Context) ControlledPage() (*rod.Page, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	if err := ctx.initLocked(); err != nil {
 		return nil, err
 	}
@@ -90,8 +110,8 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 
 // ControlledBrowser returns the browser instance, or an error if no browser is running.
 func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	if err := ctx.initLocked(); err != nil {
 		return nil, err
 	}
@@ -102,13 +122,13 @@ func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
 }
 
 func (ctx *Context) initial() error {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	return ctx.initLocked()
 }
 
 // initLocked performs lazy initialization of the browser and page.
-// Must be called with stateLock held.
+// Must be called with browserLock held.
 func (ctx *Context) initLocked() error {
 	var err error
 	if ctx.browser == nil {
@@ -142,8 +162,8 @@ func (ctx *Context) Config() Config {
 }
 
 func (ctx *Context) ClosePage() error {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	return ctx.closePage()
 }
 
@@ -182,18 +202,25 @@ func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts 
 }
 
 func (ctx *Context) BuildSnapshot() (string, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.snapshotLock.Lock()
+	defer ctx.snapshotLock.Unlock()
 	return ctx.buildSnapshotLocked()
 }
 
 // buildSnapshotLocked builds a fresh snapshot and stores it.
-// Must be called with stateLock held.
+// Must be called with snapshotLock held. Reads page and config under a brief
+// browserLock acquisition to avoid holding two locks simultaneously.
 func (ctx *Context) buildSnapshotLocked() (string, error) {
-	if ctx.page == nil {
+	// Read browser state under browserLock and immediately release it.
+	ctx.browserLock.Lock()
+	page := ctx.page
+	compact := ctx.config.CompactSnapshot
+	ctx.browserLock.Unlock()
+
+	if page == nil {
 		return "", errors.New("no active tab, call rod_navigate first")
 	}
-	snapshot, err := BuildSnapshot(ctx.page, ctx.config.CompactSnapshot)
+	snapshot, err := BuildSnapshot(page, compact)
 	if err != nil {
 		return "", err
 	}
@@ -202,8 +229,8 @@ func (ctx *Context) buildSnapshotLocked() (string, error) {
 }
 
 func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.snapshotLock.Lock()
+	defer ctx.snapshotLock.Unlock()
 	if ctx.snapshot == nil {
 		return nil, errors.New("no snapshot available, call rod_snapshot first")
 	}
@@ -214,18 +241,18 @@ func (ctx *Context) LatestSnapshot() (*Snapshot, error) {
 // Call this at the start of any handler that modifies the DOM so that the
 // Execute wrapper (or the next EnsureSnapshot call) rebuilds a fresh snapshot.
 func (ctx *Context) InvalidateSnapshot() {
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	ctx.snapshot = nil
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 }
 
 // EnsureSnapshot returns the latest snapshot, building one if none exists.
-// The check-then-build is performed atomically under stateLock to eliminate
-// the TOCTOU window that existed when lock was released between the nil check
+// The check-then-build is performed atomically under snapshotLock to eliminate
+// the TOCTOU window that existed when the lock was released between the nil check
 // and the build call.
 func (ctx *Context) EnsureSnapshot() (*Snapshot, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.snapshotLock.Lock()
+	defer ctx.snapshotLock.Unlock()
 	if ctx.snapshot != nil {
 		return ctx.snapshot, nil
 	}
@@ -236,8 +263,8 @@ func (ctx *Context) EnsureSnapshot() (*Snapshot, error) {
 }
 
 func (ctx *Context) CloseBrowser() error {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	return ctx.closeBrowser()
 }
 
@@ -292,7 +319,7 @@ const keepaliveInterval = 5 * time.Minute
 
 // startKeepalive launches a background goroutine that periodically sends a
 // lightweight CDP call (Browser.getVersion) to prevent the WebSocket from
-// going idle and being killed. Must be called with stateLock held (or before
+// going idle and being killed. Must be called with browserLock held (or before
 // concurrent access begins). The goroutine stops when keepaliveCancel is called.
 func (ctx *Context) startKeepalive() {
 	if ctx.browser == nil {
@@ -463,8 +490,8 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 // next tool call reinitializes with the new configuration.  Pass nil for any
 // field to leave it unchanged.
 func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string, stealth *bool) error {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 
 	if headless != nil {
 		ctx.config.Headless = *headless
@@ -483,8 +510,8 @@ func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string, stealth *bo
 // Close the browser
 // PS: This method only used because of server exit
 func (ctx *Context) Close() error {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	if err := ctx.closeBrowser(); err != nil {
 		log.Warnf("close browser: %s", err)
 	}

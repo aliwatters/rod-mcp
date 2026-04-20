@@ -64,52 +64,52 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 			parts = append(parts, arg.Value.String())
 		}
 		text := strings.Join(parts, " ")
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.AddConsoleMessage(ConsoleMessage{
 			Level: string(e.Type),
 			Text:  text,
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkRequestWillBeSent) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.AddNetworkRequest(NetworkRequest{
 			RequestID: string(e.RequestID),
 			Method:    e.Request.Method,
 			URL:       e.Request.URL,
 			Type:      string(e.Type),
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkResponseReceived) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.CompleteNetworkRequest(string(e.RequestID), e.Response.Status, string(e.Type))
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkWebSocketCreated) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.AddWSConnection(WebSocketConnection{
 			RequestID: string(e.RequestID),
 			URL:       e.URL,
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameSent) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
 			conn.SentCount++
 			ctx.events.AppendWSFrame(conn.URL, "sent", e.Response)
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkWebSocketFrameReceived) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
 			conn.ReceivedCount++
 			ctx.events.AppendWSFrame(conn.URL, "received", e.Response)
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	}, func(e *proto.NetworkWebSocketClosed) {
-		ctx.stateLock.Lock()
+		ctx.eventsLock.Lock()
 		ctx.events.UpdateWSConnection(string(e.RequestID), func(conn *WebSocketConnection) {
 			conn.Closed = true
 		})
-		ctx.stateLock.Unlock()
+		ctx.eventsLock.Unlock()
 	})()
 
 	return cancelFn
@@ -118,43 +118,43 @@ func (ctx *Context) attachEventListeners(page *rod.Page) (cancel func()) {
 // ConsoleMessages returns captured console messages, optionally filtered by level.
 // If clear is true, the buffer is emptied after returning.
 func (ctx *Context) ConsoleMessages(filterLevel string, clear bool) []ConsoleMessage {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	return ctx.events.ConsoleMessages(filterLevel, clear)
 }
 
 // NetworkRequests returns captured network requests, optionally filtered by URL pattern and method.
 // If clear is true, the buffer is emptied after returning.
 func (ctx *Context) NetworkRequests(filterURL, filterMethod string, clear bool) []NetworkRequest {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	return ctx.events.NetworkRequests(filterURL, filterMethod, clear)
 }
 
 // GetRequestID returns the CDP request ID for a network request at the given index.
 func (ctx *Context) GetRequestID(index int) (string, error) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	return ctx.events.GetRequestID(index)
 }
 
 // WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
 func (ctx *Context) WebSocketConnections(urlFilter string) []WebSocketConnection {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	return ctx.events.WebSocketConnections(urlFilter)
 }
 
 // WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
 func (ctx *Context) WebSocketFrames(urlFilter, direction string) []WebSocketFrame {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	return ctx.events.WebSocketFrames(urlFilter, direction)
 }
 
 // ClearWebSocketData clears all WebSocket connections and frames.
 func (ctx *Context) ClearWebSocketData() {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	ctx.events.ClearWebSocketData()
 }

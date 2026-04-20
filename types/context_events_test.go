@@ -15,8 +15,8 @@ func newEventsContext() *Context {
 
 // addConsoleMessages populates the context's console ring buffer with test data.
 func addConsoleMessages(ctx *Context, msgs []ConsoleMessage) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	for _, m := range msgs {
 		ctx.events.consoleMessages.Add(m)
 	}
@@ -24,8 +24,8 @@ func addConsoleMessages(ctx *Context, msgs []ConsoleMessage) {
 
 // addNetworkRequests populates the context's network ring buffer with test data.
 func addNetworkRequests(ctx *Context, reqs []NetworkRequest) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	for _, r := range reqs {
 		ctx.events.networkRequests.Add(r)
 	}
@@ -33,8 +33,8 @@ func addNetworkRequests(ctx *Context, reqs []NetworkRequest) {
 
 // addWSFrames populates the context's WebSocket frame ring buffer with test data.
 func addWSFrames(ctx *Context, frames []WebSocketFrame) {
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.eventsLock.Lock()
+	defer ctx.eventsLock.Unlock()
 	for _, f := range frames {
 		ctx.events.wsFrames.Add(f)
 	}
@@ -308,10 +308,10 @@ func TestWebSocketConnections_Empty(t *testing.T) {
 
 func TestWebSocketConnections_NoFilter(t *testing.T) {
 	ctx := newEventsContext()
-	ctx.stateLock.Lock()
+	ctx.eventsLock.Lock()
 	ctx.events.wsConnections.Add(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com/ws", Closed: false})
 	ctx.events.wsConnections.Add(WebSocketConnection{RequestID: "ws2", URL: "wss://b.com/ws", Closed: true})
-	ctx.stateLock.Unlock()
+	ctx.eventsLock.Unlock()
 
 	conns := ctx.WebSocketConnections("")
 	if len(conns) != 2 {
@@ -321,10 +321,10 @@ func TestWebSocketConnections_NoFilter(t *testing.T) {
 
 func TestWebSocketConnections_URLFilter(t *testing.T) {
 	ctx := newEventsContext()
-	ctx.stateLock.Lock()
+	ctx.eventsLock.Lock()
 	ctx.events.wsConnections.Add(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com/ws"})
 	ctx.events.wsConnections.Add(WebSocketConnection{RequestID: "ws2", URL: "wss://b.com/ws"})
-	ctx.stateLock.Unlock()
+	ctx.eventsLock.Unlock()
 
 	conns := ctx.WebSocketConnections("a.com")
 	if len(conns) != 1 {
@@ -420,10 +420,10 @@ func TestWebSocketFrames_URLAndDirectionFilter(t *testing.T) {
 func TestClearWebSocketData_ClearsAll(t *testing.T) {
 	ctx := newEventsContext()
 
-	ctx.stateLock.Lock()
+	ctx.eventsLock.Lock()
 	idx := ctx.events.wsConnections.AddWithIndex(WebSocketConnection{RequestID: "ws1", URL: "wss://a.com"})
 	ctx.events.wsConnIndex = map[string]int{"ws1": idx}
-	ctx.stateLock.Unlock()
+	ctx.eventsLock.Unlock()
 	addWSFrames(ctx, []WebSocketFrame{
 		{URL: "wss://a.com", Direction: "sent", PayloadData: "data"},
 	})
@@ -440,9 +440,9 @@ func TestClearWebSocketData_ClearsAll(t *testing.T) {
 		t.Errorf("expected 0 frames after clear, got %d", len(frames))
 	}
 
-	ctx.stateLock.Lock()
+	ctx.eventsLock.Lock()
 	connIndex := ctx.events.wsConnIndex
-	ctx.stateLock.Unlock()
+	ctx.eventsLock.Unlock()
 	if connIndex != nil {
 		t.Error("wsConnIndex should be nil after clear")
 	}
