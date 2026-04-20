@@ -204,19 +204,18 @@ var (
 	}
 )
 
+// SnapshotRegistrations is the single source of truth for text-mode (snapshot)
+// tool definitions and their handlers.
+var SnapshotRegistrations = Registrations{
+	{Snapshot, SnapshotHandler},
+	{Click, ClickHandler},
+	{Hover, HoverHandler},
+	{Fill, FillHandler},
+	{Selector, SelectorHandler},
+}
+
+// Derived slices and maps kept for backward compatibility with existing tests.
 var (
-	SnapshotToolHandlers = map[string]ToolHandler{
-		SnapshotToolKey: SnapshotHandler,
-		ClickToolKey:    ClickHandler,
-		HoverToolKey:    HoverHandler,
-		FillToolKey:     FillHandler,
-		SelectorToolKey: SelectorHandler,
-	}
-	Snapshots = []mcp.Tool{
-		Snapshot,
-		Click,
-		Hover,
-		Fill,
-		Selector,
-	}
+	SnapshotToolHandlers = SnapshotRegistrations.Handlers()
+	Snapshots            = SnapshotRegistrations.Tools()
 )

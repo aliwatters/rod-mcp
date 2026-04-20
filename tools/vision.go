@@ -113,13 +113,15 @@ var (
 	}
 )
 
+// VisionToolRegistrations is the single source of truth for vision-mode tool
+// definitions and their handlers.
+var VisionToolRegistrations = Registrations{
+	{VisionClick, VisionClickHandler},
+	{VisionFill, VisionFillHandler},
+}
+
+// Derived slices and maps kept for backward compatibility.
 var (
-	VisionToolHandlers = map[string]ToolHandler{
-		VisionClickToolKey: VisionClickHandler,
-		VisionFillToolKey:  VisionFillHandler,
-	}
-	VisionToolDefs = []mcp.Tool{
-		VisionClick,
-		VisionFill,
-	}
+	VisionToolHandlers = VisionToolRegistrations.Handlers()
+	VisionToolDefs     = VisionToolRegistrations.Tools()
 )
