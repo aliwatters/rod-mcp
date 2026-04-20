@@ -20,8 +20,8 @@ func (ctx *Context) NewTab(url string) (*rod.Page, error) {
 	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 
 	var page *rod.Page
 	var err error
@@ -42,8 +42,8 @@ func (ctx *Context) ListTabs() ([]TabInfo, error) {
 	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {
@@ -71,8 +71,8 @@ func (ctx *Context) SelectTab(index int) (*rod.Page, error) {
 	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {
@@ -91,8 +91,8 @@ func (ctx *Context) CloseTab(index int) error {
 	if err := ctx.initial(); err != nil {
 		return err
 	}
-	ctx.stateLock.Lock()
-	defer ctx.stateLock.Unlock()
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 
 	pages, err := ctx.browser.Pages()
 	if err != nil {

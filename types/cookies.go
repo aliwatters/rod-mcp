@@ -127,6 +127,11 @@ func decryptCookieValue(encrypted []byte, key []byte) (string, error) {
 // buildDomainFilter constructs an SQL WHERE clause for the given domain patterns.
 // Wildcard patterns (*.example.com) match any subdomain; plain patterns match as a suffix.
 // Returns an error if any pattern is invalid, and an empty string if domains is empty.
+//
+// Defense-in-depth: isValidDomainPattern rejects all SQL metacharacters before this
+// function is called. As a second layer, sqliteLikeEscape escapes LIKE metacharacters
+// ('_' and '%') within the domain suffix so no user-controlled value is ever
+// interpolated raw into the query string.
 func buildDomainFilter(domains []string) (string, error) {
 	if len(domains) == 0 {
 		return "", nil
@@ -140,17 +145,31 @@ func buildDomainFilter(domains []string) (string, error) {
 		if !isValidDomainPattern(d) {
 			return "", fmt.Errorf("invalid domain pattern %q", d)
 		}
+		// Strip the leading '*' for wildcard patterns (*.example.com → .example.com).
+		suffix := d
 		if strings.HasPrefix(d, "*.") {
-			suffix := d[1:]
-			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", suffix))
-		} else {
-			conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s'", d))
+			suffix = d[1:]
 		}
+		// Escape LIKE metacharacters within the domain suffix as a second layer of
+		// defense. The domain allowlist already forbids '%' and '_', so this is
+		// belt-and-suspenders, not the primary guard.
+		escaped := sqliteLikeEscape(suffix)
+		conditions = append(conditions, fmt.Sprintf("host_key LIKE '%%%s' ESCAPE '\\'", escaped))
 	}
 	if len(conditions) == 0 {
 		return "", nil
 	}
 	return " WHERE " + strings.Join(conditions, " OR "), nil
+}
+
+// sqliteLikeEscape escapes SQLite LIKE pattern metacharacters ('%' and '_') in s
+// using a backslash escape. The returned string is safe to embed inside a
+// LIKE '...' ESCAPE '\\' clause.
+func sqliteLikeEscape(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "%", `\%`)
+	s = strings.ReplaceAll(s, "_", `\_`)
+	return s
 }
 
 // parseCookieLine parses a single tab-separated cookie row from sqlite3 output

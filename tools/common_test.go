@@ -289,6 +289,52 @@ func TestEvaluateToolDefinition(t *testing.T) {
 	}
 }
 
+// TestRegistrationsDRY verifies that the Registrations type correctly derives
+// both Tools() slices and Handlers() maps, so the two structures cannot drift.
+func TestRegistrationsDRY(t *testing.T) {
+	// Every tool in CommonRegistrations must appear in CommonTools with a handler.
+	for _, reg := range CommonRegistrations {
+		name := reg.Tool.Name
+
+		foundTool := false
+		for _, t2 := range CommonTools {
+			if t2.Name == name {
+				foundTool = true
+				break
+			}
+		}
+		if !foundTool {
+			t.Errorf("CommonRegistrations entry %q missing from CommonTools", name)
+		}
+
+		if _, ok := CommonToolHandlers[name]; !ok {
+			t.Errorf("CommonRegistrations entry %q missing from CommonToolHandlers", name)
+		}
+	}
+
+	// Tools() and Handlers() must have the same count as CommonRegistrations.
+	if len(CommonTools) != len(CommonRegistrations) {
+		t.Errorf("CommonTools len = %d, want %d (same as CommonRegistrations)", len(CommonTools), len(CommonRegistrations))
+	}
+	if len(CommonToolHandlers) != len(CommonRegistrations) {
+		t.Errorf("CommonToolHandlers len = %d, want %d (same as CommonRegistrations)", len(CommonToolHandlers), len(CommonRegistrations))
+	}
+}
+
+func TestTextRegistrationsComplete(t *testing.T) {
+	// TextRegistrations must contain all common + all snapshot tools.
+	wantLen := len(CommonRegistrations) + len(SnapshotRegistrations)
+	if len(TextRegistrations) != wantLen {
+		t.Errorf("TextRegistrations len = %d, want %d", len(TextRegistrations), wantLen)
+	}
+	handlers := TextRegistrations.Handlers()
+	for _, reg := range TextRegistrations {
+		if _, ok := handlers[reg.Tool.Name]; !ok {
+			t.Errorf("TextRegistrations entry %q has no handler in derived map", reg.Tool.Name)
+		}
+	}
+}
+
 func TestNavigationUsesToolKey(t *testing.T) {
 	if Navigation.Name != NavigationToolKey {
 		t.Errorf("Navigation tool name = %q, want %q (should use NavigationToolKey constant)", Navigation.Name, NavigationToolKey)

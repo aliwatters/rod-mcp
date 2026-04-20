@@ -88,15 +88,15 @@ func TestInvalidateSnapshot_ClearsSnapshot(t *testing.T) {
 	ctx := newTestContext()
 
 	// Manually set a snapshot to simulate a previous build.
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	ctx.snapshot = &Snapshot{}
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 
 	ctx.InvalidateSnapshot()
 
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	snap := ctx.snapshot
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 
 	if snap != nil {
 		t.Error("InvalidateSnapshot: snapshot should be nil after invalidation")
@@ -115,9 +115,9 @@ func TestLatestSnapshot_ReturnsExisting(t *testing.T) {
 	ctx := newTestContext()
 
 	expected := &Snapshot{textSnapshot: "test-snapshot"}
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	ctx.snapshot = expected
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 
 	got, err := ctx.LatestSnapshot()
 	if err != nil {
@@ -132,9 +132,9 @@ func TestInvalidateSnapshot_ThenLatestSnapshot_Errors(t *testing.T) {
 	ctx := newTestContext()
 
 	// Set and then invalidate.
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	ctx.snapshot = &Snapshot{}
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 
 	ctx.InvalidateSnapshot()
 
@@ -184,9 +184,9 @@ func TestEnsureSnapshot_ReturnsExistingSnapshot(t *testing.T) {
 
 	// Pre-populate the snapshot so EnsureSnapshot returns it without building.
 	expected := &Snapshot{textSnapshot: "cached-snapshot"}
-	ctx.stateLock.Lock()
+	ctx.snapshotLock.Lock()
 	ctx.snapshot = expected
-	ctx.stateLock.Unlock()
+	ctx.snapshotLock.Unlock()
 
 	got, err := ctx.EnsureSnapshot()
 	if err != nil {

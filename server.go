@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+
 	"github.com/charmbracelet/log"
+	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/aliwatters/rod-mcp/tools"
 	"github.com/aliwatters/rod-mcp/types"
-	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 type Server struct {
@@ -23,21 +24,20 @@ func NewServer(stdCtx context.Context, cfg types.Config) *Server {
 	}
 	switch ctx.CurrentMode() {
 	case types.Text:
-		ser.registerTools(tools.TextTools, tools.TextToolHandlers)
+		ser.registerTools(tools.TextRegistrations)
 	case types.Vision:
-		ser.registerTools(tools.VisionTools, tools.VisionCombinedHandlers)
+		ser.registerTools(tools.VisionRegistrations)
 	}
 	return ser
 }
 
-func (s *Server) registerTools(mcpTools []mcp.Tool, handlers map[string]tools.ToolHandler) *Server {
-	for _, mt := range mcpTools {
-		if handlerFunc, ok := handlers[mt.Name]; ok {
-			log.Debugf("register tool: %s", mt.Name)
-			s.mcpServer.AddTool(mt, handlerFunc(s.ctx))
-		} else {
-			log.Warnf("tool %q defined but no handler registered — check tool name", mt.Name)
-		}
+// registerTools registers all tools from the given Registrations into the MCP server.
+// Each Registration is self-contained — it pairs a tool definition with its handler,
+// so there is no risk of a tool being registered without a handler.
+func (s *Server) registerTools(regs tools.Registrations) *Server {
+	for _, reg := range regs {
+		log.Debugf("register tool: %s", reg.Tool.Name)
+		s.mcpServer.AddTool(reg.Tool, reg.Handler(s.ctx))
 	}
 	return s
 }

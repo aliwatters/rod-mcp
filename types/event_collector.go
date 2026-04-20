@@ -19,7 +19,7 @@ const (
 )
 
 // eventCollector owns the ring buffers for console messages, network requests,
-// and WebSocket tracking. All methods assume the caller holds Context.stateLock.
+// and WebSocket tracking. All methods assume the caller holds Context.eventsLock.
 type eventCollector struct {
 	consoleMessages *RingBuffer[ConsoleMessage]
 	networkRequests *RingBuffer[NetworkRequest]
@@ -43,13 +43,13 @@ func newEventCollector() *eventCollector {
 	}
 }
 
-// AddConsoleMessage records a console message. Must be called with stateLock held.
+// AddConsoleMessage records a console message. Must be called with eventsLock held.
 func (ec *eventCollector) AddConsoleMessage(msg ConsoleMessage) {
 	ec.consoleMessages.Add(msg)
 }
 
 // AddNetworkRequest records a new outgoing request and tracks it as pending.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) AddNetworkRequest(req NetworkRequest) {
 	if ec.pendingRequests == nil {
 		ec.pendingRequests = make(map[string]int)
@@ -59,7 +59,7 @@ func (ec *eventCollector) AddNetworkRequest(req NetworkRequest) {
 }
 
 // CompleteNetworkRequest updates a pending request with its response status and type.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) CompleteNetworkRequest(requestID string, status int, typ string) {
 	if idx, ok := ec.pendingRequests[requestID]; ok {
 		ec.networkRequests.UpdateAt(idx, func(req *NetworkRequest) {
@@ -70,7 +70,7 @@ func (ec *eventCollector) CompleteNetworkRequest(requestID string, status int, t
 	}
 }
 
-// AddWSConnection records a new WebSocket connection. Must be called with stateLock held.
+// AddWSConnection records a new WebSocket connection. Must be called with eventsLock held.
 func (ec *eventCollector) AddWSConnection(conn WebSocketConnection) {
 	if ec.wsConnIndex == nil {
 		ec.wsConnIndex = make(map[string]int)
@@ -80,7 +80,7 @@ func (ec *eventCollector) AddWSConnection(conn WebSocketConnection) {
 }
 
 // UpdateWSConnection calls fn on the WebSocket connection identified by requestID.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) UpdateWSConnection(requestID string, fn func(*WebSocketConnection)) {
 	if idx, ok := ec.wsConnIndex[requestID]; ok {
 		ec.wsConnections.UpdateAt(idx, fn)
@@ -88,7 +88,7 @@ func (ec *eventCollector) UpdateWSConnection(requestID string, fn func(*WebSocke
 }
 
 // AppendWSFrame adds a WebSocket frame to the ring buffer.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) AppendWSFrame(url, direction string, frame *proto.NetworkWebSocketFrame) {
 	ec.wsFrames.Add(WebSocketFrame{
 		URL:         url,
@@ -100,7 +100,7 @@ func (ec *eventCollector) AppendWSFrame(url, direction string, frame *proto.Netw
 
 // ConsoleMessages returns captured console messages, optionally filtered by level.
 // If clear is true, the buffer is emptied after returning.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) ConsoleMessages(filterLevel string, clear bool) []ConsoleMessage {
 	all := ec.consoleMessages.Slice()
 	result := filterSlice(all, func(msg ConsoleMessage) bool {
@@ -127,7 +127,7 @@ func (ec *eventCollector) ConsoleMessages(filterLevel string, clear bool) []Cons
 
 // NetworkRequests returns captured network requests, optionally filtered by URL pattern and method.
 // If clear is true, the buffer is emptied after returning.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) NetworkRequests(filterURL, filterMethod string, clear bool) []NetworkRequest {
 	result := filterSlice(ec.networkRequests.Slice(), func(req NetworkRequest) bool {
 		if filterURL != "" && !strings.Contains(req.URL, filterURL) {
@@ -148,7 +148,7 @@ func (ec *eventCollector) NetworkRequests(filterURL, filterMethod string, clear 
 }
 
 // GetRequestID returns the CDP request ID for a network request at the given index.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) GetRequestID(index int) (string, error) {
 	all := ec.networkRequests.Slice()
 	if len(all) == 0 {
@@ -161,7 +161,7 @@ func (ec *eventCollector) GetRequestID(index int) (string, error) {
 }
 
 // WebSocketConnections returns tracked WebSocket connections, optionally filtered by URL.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) WebSocketConnections(urlFilter string) []WebSocketConnection {
 	return filterSlice(ec.wsConnections.Slice(), func(conn WebSocketConnection) bool {
 		return urlFilter == "" || strings.Contains(conn.URL, urlFilter)
@@ -169,7 +169,7 @@ func (ec *eventCollector) WebSocketConnections(urlFilter string) []WebSocketConn
 }
 
 // WebSocketFrames returns captured WebSocket frames, optionally filtered by URL and direction.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) WebSocketFrames(urlFilter, direction string) []WebSocketFrame {
 	return filterSlice(ec.wsFrames.Slice(), func(f WebSocketFrame) bool {
 		if urlFilter != "" && !strings.Contains(f.URL, urlFilter) {
@@ -183,7 +183,7 @@ func (ec *eventCollector) WebSocketFrames(urlFilter, direction string) []WebSock
 }
 
 // ClearWebSocketData clears all WebSocket connections and frames.
-// Must be called with stateLock held.
+// Must be called with eventsLock held.
 func (ec *eventCollector) ClearWebSocketData() {
 	ec.wsConnections.Clear()
 	ec.wsConnIndex = nil

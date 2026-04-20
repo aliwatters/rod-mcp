@@ -39,8 +39,8 @@ var (
 
 			// Clear override if no coordinates provided
 			if !hasLat && !hasLng {
-				clearErr := proto.EmulationSetGeolocationOverride{}.Call(page)
-				if clearErr != nil {
+				clear := proto.EmulationSetGeolocationOverride{}
+				if clearErr := clear.Call(page); clearErr != nil {
 					return toolErr("clear geolocation", clearErr)
 				}
 				return mcp.NewToolResultText("Geolocation override cleared"), nil
@@ -50,8 +50,14 @@ var (
 				return toolErr("geolocation", fmt.Errorf("both 'latitude' and 'longitude' are required"))
 			}
 
-			lat := args["latitude"].(float64)
-			lng := args["longitude"].(float64)
+			lat, err := getFloatArg(args, "latitude")
+			if err != nil {
+				return toolErr("geolocation", err)
+			}
+			lng, err := getFloatArg(args, "longitude")
+			if err != nil {
+				return toolErr("geolocation", err)
+			}
 			accuracy := getOptionalFloatArg(args, "accuracy", 1)
 
 			if lat < -90 || lat > 90 {

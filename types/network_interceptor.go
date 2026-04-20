@@ -5,7 +5,7 @@ import (
 )
 
 // networkInterceptor owns the state for CDP request interception (Fetch domain).
-// All methods assume the caller holds Context.stateLock.
+// All methods assume the caller holds Context.interceptLock.
 type networkInterceptor struct {
 	rules   []InterceptRule
 	enabled bool
@@ -29,14 +29,14 @@ type InterceptRule struct {
 }
 
 // Enabled returns whether request interception is currently enabled.
-// Must be called with stateLock held.
+// Must be called with interceptLock held.
 func (ni *networkInterceptor) Enabled() bool {
 	return ni.enabled
 }
 
 // SetEnabled sets whether interception is enabled.
 // When disabling, any existing intercept listener goroutine is cancelled and rules are cleared.
-// Must be called with stateLock held.
+// Must be called with interceptLock held.
 func (ni *networkInterceptor) SetEnabled(enabled bool) {
 	ni.enabled = enabled
 	if !enabled {
@@ -50,7 +50,7 @@ func (ni *networkInterceptor) SetEnabled(enabled bool) {
 
 // SetCancel stores the cancel function for the intercept EachEvent goroutine.
 // Any prior listener is cancelled before replacing.
-// Must be called with stateLock held.
+// Must be called with interceptLock held.
 func (ni *networkInterceptor) SetCancel(cancel func()) {
 	if ni.cancel != nil {
 		ni.cancel()
@@ -59,7 +59,7 @@ func (ni *networkInterceptor) SetCancel(cancel func()) {
 }
 
 // Cancel cancels the intercept listener goroutine if one is running, and
-// clears the cancel function. Must be called with stateLock held.
+// clears the cancel function. Must be called with interceptLock held.
 func (ni *networkInterceptor) Cancel() {
 	if ni.cancel != nil {
 		ni.cancel()
@@ -68,13 +68,13 @@ func (ni *networkInterceptor) Cancel() {
 }
 
 // AddRule appends an interception rule.
-// Must be called with stateLock held.
+// Must be called with interceptLock held.
 func (ni *networkInterceptor) AddRule(rule InterceptRule) {
 	ni.rules = append(ni.rules, rule)
 }
 
 // Rules returns a copy of the current interception rules.
-// Must be called with stateLock held.
+// Must be called with interceptLock held.
 func (ni *networkInterceptor) Rules() []InterceptRule {
 	rules := make([]InterceptRule, len(ni.rules))
 	copy(rules, ni.rules)

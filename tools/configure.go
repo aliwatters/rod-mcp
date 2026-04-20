@@ -24,20 +24,9 @@ var ConfigureHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 	handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		args := request.GetArguments()
 
-		var headless *bool
-		if v, ok := args["headless"].(bool); ok {
-			headless = &v
-		}
-
-		var cdpEndpoint *string
-		if v, ok := args["cdp_endpoint"].(string); ok {
-			cdpEndpoint = &v
-		}
-
-		var stealth *bool
-		if v, ok := args["stealth"].(bool); ok {
-			stealth = &v
-		}
+		headless := getOptionalBoolPtr(args, "headless")
+		cdpEndpoint := getOptionalStringPtr(args, "cdp_endpoint")
+		stealth := getOptionalBoolPtr(args, "stealth")
 
 		if err := rodCtx.Reconfigure(headless, cdpEndpoint, stealth); err != nil {
 			return toolErr("configure browser", err)
