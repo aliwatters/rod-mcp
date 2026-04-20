@@ -264,3 +264,105 @@ func TestDecryptCookieValue_V11Prefix(t *testing.T) {
 		t.Errorf("decryptCookieValue v11: got %q, want %q", got, string(plaintext))
 	}
 }
+
+// ---------------------------------------------------------------------------
+// sqliteLikeEscape
+// ---------------------------------------------------------------------------
+
+func TestSQLiteLikeEscape(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"example.com", "example.com"},
+		{".example.com", ".example.com"},
+		{"no_special", `no\_special`},
+		{"has%percent", `has\%percent`},
+		{`has\backslash`, `has\\backslash`},
+		{"combined_%_test", `combined\_\%\_test`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := sqliteLikeEscape(tt.input)
+			if got != tt.want {
+				t.Errorf("sqliteLikeEscape(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// buildDomainFilter
+// ---------------------------------------------------------------------------
+
+func TestBuildDomainFilter_Empty(t *testing.T) {
+	got, err := buildDomainFilter(nil)
+	if err != nil {
+		t.Fatalf("buildDomainFilter(nil): unexpected error: %v", err)
+	}
+	if got != "" {
+		t.Errorf("buildDomainFilter(nil) = %q, want empty", got)
+	}
+}
+
+func TestBuildDomainFilter_SingleDomain(t *testing.T) {
+	got, err := buildDomainFilter([]string{"example.com"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := " WHERE host_key LIKE '%example.com' ESCAPE '\\'"
+	if got != want {
+		t.Errorf("buildDomainFilter([example.com]) = %q, want %q", got, want)
+	}
+}
+
+func TestBuildDomainFilter_WildcardDomain(t *testing.T) {
+	got, err := buildDomainFilter([]string{"*.example.com"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := " WHERE host_key LIKE '%.example.com' ESCAPE '\\'"
+	if got != want {
+		t.Errorf("buildDomainFilter([*.example.com]) = %q, want %q", got, want)
+	}
+}
+
+func TestBuildDomainFilter_MultipleDomains(t *testing.T) {
+	got, err := buildDomainFilter([]string{"foo.com", "bar.com"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := " WHERE host_key LIKE '%foo.com' ESCAPE '\\' OR host_key LIKE '%bar.com' ESCAPE '\\'"
+	if got != want {
+		t.Errorf("buildDomainFilter([foo.com, bar.com]) = %q, want %q", got, want)
+	}
+}
+
+func TestBuildDomainFilter_InvalidPatternRejected(t *testing.T) {
+	adversarial := []string{
+		"evil'; DROP TABLE cookies; --",
+		"bad domain",
+		"semi;colon.com",
+		"has/slash.com",
+		"http://example.com",
+	}
+	for _, d := range adversarial {
+		t.Run(d, func(t *testing.T) {
+			_, err := buildDomainFilter([]string{d})
+			if err == nil {
+				t.Errorf("buildDomainFilter(%q): expected error for adversarial input, got nil", d)
+			}
+		})
+	}
+}
+
+func TestBuildDomainFilter_SkipsBlankEntries(t *testing.T) {
+	got, err := buildDomainFilter([]string{"", "  ", "example.com", ""})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := " WHERE host_key LIKE '%example.com' ESCAPE '\\'"
+	if got != want {
+		t.Errorf("buildDomainFilter with blanks = %q, want %q", got, want)
+	}
+}
