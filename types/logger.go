@@ -16,9 +16,9 @@ type LoggerConfig struct {
 	// "debug"
 	LoggerLevel          string `yaml:"loggerLevel" json:"loggerLevel"`
 	LoggerFileName       string `yaml:"loggerFileName" json:"loggerFileName"`
-	LoggerFileMaxSize    int    `yaml:"LoggerFileMaxSize" json:"loggerFileMaxSize"`
-	LoggerFileMaxBackups int    `yaml:"LoggerFileMaxBackups" json:"loggerFileMaxBackups"`
-	LoggerFileMaxAge     int    `yaml:"LoggerFileMaxAge" json:"loggerFileMaxAge"`
+	LoggerFileMaxSize    int    `yaml:"loggerFileMaxSize" json:"loggerFileMaxSize"`
+	LoggerFileMaxBackups int    `yaml:"loggerFileMaxBackups" json:"loggerFileMaxBackups"`
+	LoggerFileMaxAge     int    `yaml:"loggerFileMaxAge" json:"loggerFileMaxAge"`
 	LoggerPrefix         string `yaml:"loggerPrefix" json:"loggerPrefix"`
 }
 
