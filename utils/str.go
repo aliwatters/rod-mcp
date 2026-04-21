@@ -2,7 +2,8 @@ package utils
 
 import (
 	"bytes"
-	"math/rand"
+	"crypto/rand"
+	"math/big"
 	"text/template"
 )
 
@@ -10,7 +11,11 @@ func RandomString(length int) string {
 	letters := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	result := make([]rune, length)
 	for i := range result {
-		result[i] = letters[rand.Intn(len(letters))]
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			panic("crypto/rand failed: " + err.Error())
+		}
+		result[i] = letters[n.Int64()]
 	}
 	return string(result)
 }
