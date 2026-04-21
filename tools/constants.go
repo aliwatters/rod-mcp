@@ -33,9 +33,6 @@ const (
 
 	// defaultFormContainerTimeout is the max time to wait for a modal form container to appear.
 	defaultFormContainerTimeout = 5 * time.Second
-
-	// dragStepDelay is the pause between mouse-move steps during drag operations.
-	dragStepDelay = 10 * time.Millisecond
 )
 
 // Default parameter values for tool options.

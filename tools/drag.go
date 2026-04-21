@@ -3,7 +3,6 @@ package tools
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
@@ -84,64 +83,33 @@ var (
 				return toolErr("drag target", err)
 			}
 
+			mouse := page.Mouse
+
 			// Move to start position
-			if err := (proto.InputDispatchMouseEvent{
-				Type: proto.InputDispatchMouseEventTypeMouseMoved,
-				X:    startX,
-				Y:    startY,
-			}).Call(page); err != nil {
+			if err := mouse.MoveTo(proto.NewPoint(startX, startY)); err != nil {
 				return toolErr("move to start", err)
 			}
 
 			// Press at start
-			if err := (proto.InputDispatchMouseEvent{
-				Type:       proto.InputDispatchMouseEventTypeMousePressed,
-				X:          startX,
-				Y:          startY,
-				Button:     proto.InputMouseButtonLeft,
-				ClickCount: 1,
-			}).Call(page); err != nil {
+			if err := mouse.Down(proto.InputMouseButtonLeft, 1); err != nil {
 				return toolErr("mouse press", err)
 			}
 
-			// Ensure mouse is released even if move steps fail
+			// Ensure mouse is released even if the linear move fails
 			mouseReleased := false
 			defer func() {
 				if !mouseReleased {
-					_ = (proto.InputDispatchMouseEvent{
-						Type:       proto.InputDispatchMouseEventTypeMouseReleased,
-						X:          endX,
-						Y:          endY,
-						Button:     proto.InputMouseButtonLeft,
-						ClickCount: 1,
-					}).Call(page)
+					_ = mouse.Up(proto.InputMouseButtonLeft, 1)
 				}
 			}()
 
-			// Move in steps
-			for i := 1; i <= steps; i++ {
-				t := float64(i) / float64(steps)
-				x := startX + (endX-startX)*t
-				y := startY + (endY-startY)*t
-				if err := (proto.InputDispatchMouseEvent{
-					Type:   proto.InputDispatchMouseEventTypeMouseMoved,
-					X:      x,
-					Y:      y,
-					Button: proto.InputMouseButtonLeft,
-				}).Call(page); err != nil {
-					return toolErr("mouse move", err)
-				}
-				time.Sleep(dragStepDelay)
+			// Move to end in steps using rod's built-in linear interpolation
+			if err := mouse.MoveLinear(proto.NewPoint(endX, endY), steps); err != nil {
+				return toolErr("mouse move", err)
 			}
 
 			// Release at end
-			if err := (proto.InputDispatchMouseEvent{
-				Type:       proto.InputDispatchMouseEventTypeMouseReleased,
-				X:          endX,
-				Y:          endY,
-				Button:     proto.InputMouseButtonLeft,
-				ClickCount: 1,
-			}).Call(page); err != nil {
+			if err := mouse.Up(proto.InputMouseButtonLeft, 1); err != nil {
 				return toolErr("mouse release", err)
 			}
 			mouseReleased = true
