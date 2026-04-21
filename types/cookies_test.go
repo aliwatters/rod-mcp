@@ -2,6 +2,9 @@ package types
 
 import (
 	"crypto/aes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-rod/rod/lib/proto"
@@ -364,5 +367,118 @@ func TestBuildDomainFilter_SkipsBlankEntries(t *testing.T) {
 	want := " WHERE host_key LIKE '%example.com' ESCAPE '\\'"
 	if got != want {
 		t.Errorf("buildDomainFilter with blanks = %q, want %q", got, want)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ReadChromeCookiesWithDeps — DI / testability
+// ---------------------------------------------------------------------------
+
+// stubKeychainReader is a test double for KeychainReader.
+type stubKeychainReader struct {
+	password string
+	err      error
+}
+
+func (s stubKeychainReader) ReadKey(_, _ string) (string, error) {
+	return s.password, s.err
+}
+
+// stubSQLiteQuerier is a test double for SQLiteQuerier.
+type stubSQLiteQuerier struct {
+	output []byte
+	err    error
+}
+
+func (s stubSQLiteQuerier) Query(_, _, _ string) ([]byte, error) {
+	return s.output, s.err
+}
+
+// makeTempCookiesDB creates a minimal directory structure that satisfies the
+// os.Stat check in ReadChromeCookiesWithDeps (Default/Cookies must exist).
+func makeTempCookiesDB(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	defaultDir := filepath.Join(dir, "Default")
+	if err := os.MkdirAll(defaultDir, 0o700); err != nil {
+		t.Fatalf("mkdir Default: %v", err)
+	}
+	cookiesPath := filepath.Join(defaultDir, "Cookies")
+	if err := os.WriteFile(cookiesPath, []byte("placeholder"), 0o600); err != nil {
+		t.Fatalf("write Cookies: %v", err)
+	}
+	return dir
+}
+
+func TestReadChromeCookiesWithDeps_KeychainError(t *testing.T) {
+	profileDir := makeTempCookiesDB(t)
+	kr := stubKeychainReader{err: fmt.Errorf("keychain unavailable")}
+	sq := stubSQLiteQuerier{}
+
+	_, err := ReadChromeCookiesWithDeps(profileDir, nil, kr, sq)
+	if err == nil {
+		t.Fatal("expected error when keychain read fails, got nil")
+	}
+}
+
+func TestReadChromeCookiesWithDeps_SQLiteError(t *testing.T) {
+	profileDir := makeTempCookiesDB(t)
+	kr := stubKeychainReader{password: "testpassword"}
+	sq := stubSQLiteQuerier{err: fmt.Errorf("sqlite3 not found")}
+
+	_, err := ReadChromeCookiesWithDeps(profileDir, nil, kr, sq)
+	if err == nil {
+		t.Fatal("expected error when sqlite3 query fails, got nil")
+	}
+}
+
+func TestReadChromeCookiesWithDeps_MissingDB(t *testing.T) {
+	kr := stubKeychainReader{password: "testpassword"}
+	sq := stubSQLiteQuerier{}
+
+	_, err := ReadChromeCookiesWithDeps("/nonexistent/profile", nil, kr, sq)
+	if err == nil {
+		t.Fatal("expected error for missing cookies database, got nil")
+	}
+}
+
+func TestReadChromeCookiesWithDeps_EmptyOutput(t *testing.T) {
+	profileDir := makeTempCookiesDB(t)
+	kr := stubKeychainReader{password: "testpassword"}
+	sq := stubSQLiteQuerier{output: []byte("")}
+
+	cookies, err := ReadChromeCookiesWithDeps(profileDir, nil, kr, sq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cookies) != 0 {
+		t.Errorf("expected 0 cookies for empty sqlite output, got %d", len(cookies))
+	}
+}
+
+func TestReadChromeCookiesWithDeps_PlaintextCookie(t *testing.T) {
+	profileDir := makeTempCookiesDB(t)
+
+	// Build a real AES key from a known password so parseCookieLine can be invoked
+	// with a plaintext value (no encryption needed in this path).
+	kr := stubKeychainReader{password: "testpassword"}
+
+	// Tab-separated row: host_key, name, encrypted_hex, plain_value, path,
+	// is_secure, is_httponly, expires_utc, samesite
+	row := ".example.com\tsession\t\thello-value\t/\t1\t0\t0\t0\n"
+	sq := stubSQLiteQuerier{output: []byte(row)}
+
+	cookies, err := ReadChromeCookiesWithDeps(profileDir, nil, kr, sq)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cookies) != 1 {
+		t.Fatalf("expected 1 cookie, got %d", len(cookies))
+	}
+	if cookies[0].Value != "hello-value" {
+		t.Errorf("cookie value = %q, want %q", cookies[0].Value, "hello-value")
+	}
+	if cookies[0].Name != "session" {
+		t.Errorf("cookie name = %q, want %q", cookies[0].Name, "session")
 	}
 }

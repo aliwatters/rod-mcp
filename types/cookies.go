@@ -62,18 +62,54 @@ func chromeSameSiteToCDP(ss int) proto.NetworkCookieSameSite {
 	}
 }
 
-// readChromeEncryptionKey reads the Chrome Safe Storage password from the macOS Keychain.
-func readChromeEncryptionKey() (string, error) {
+// KeychainReader reads a secret from the OS keychain.
+// The default implementation calls the macOS `security` CLI.
+type KeychainReader interface {
+	ReadKey(service, account string) (string, error)
+}
+
+// SQLiteQuerier executes a read-only query against an SQLite database file and
+// returns the raw tab-separated output. The default implementation delegates to
+// the sqlite3 CLI binary.
+type SQLiteQuerier interface {
+	Query(dbPath, separator, query string) ([]byte, error)
+}
+
+// defaultKeychainReader is the production KeychainReader that calls the macOS
+// `security find-generic-password` command.
+type defaultKeychainReader struct{}
+
+func (defaultKeychainReader) ReadKey(service, account string) (string, error) {
 	if runtime.GOOS != "darwin" {
 		return "", fmt.Errorf("cookie decryption is currently only supported on macOS")
 	}
-
-	cmd := exec.Command("security", "find-generic-password", "-w", "-s", "Chrome Safe Storage", "-a", "Chrome")
+	cmd := exec.Command("security", "find-generic-password", "-w", "-s", service, "-a", account)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("failed to read Chrome Safe Storage from Keychain: %w (you may need to allow access)", err)
+		return "", fmt.Errorf("failed to read %s from Keychain for account %s: %w (you may need to allow access)", service, account, err)
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// defaultSQLiteQuerier is the production SQLiteQuerier that calls the sqlite3 CLI.
+type defaultSQLiteQuerier struct{}
+
+func (defaultSQLiteQuerier) Query(dbPath, separator, query string) ([]byte, error) {
+	sqlite3Path, err := exec.LookPath("sqlite3")
+	if err != nil {
+		return nil, fmt.Errorf("sqlite3 not found in PATH")
+	}
+	cmd := exec.Command(sqlite3Path, "-separator", separator, dbPath, query)
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("sqlite3 query failed: %w", err)
+	}
+	return out, nil
+}
+
+// readChromeEncryptionKey reads the Chrome Safe Storage password from the macOS Keychain.
+func readChromeEncryptionKey() (string, error) {
+	return defaultKeychainReader{}.ReadKey("Chrome Safe Storage", "Chrome")
 }
 
 // deriveChromeKey derives the AES-128-CBC key from the Keychain password using PBKDF2.
@@ -229,24 +265,27 @@ func parseCookieLine(line string, key []byte) (*proto.NetworkCookieParam, error)
 // ReadChromeCookies reads and decrypts cookies from a Chrome profile's Cookies SQLite DB.
 // If domains is non-empty, only cookies matching those domains are returned.
 // Returns CDP-compatible cookie params ready for injection.
+// Uses the default production implementations of KeychainReader and SQLiteQuerier.
 func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCookieParam, error) {
+	return ReadChromeCookiesWithDeps(profileDir, domains, defaultKeychainReader{}, defaultSQLiteQuerier{})
+}
+
+// ReadChromeCookiesWithDeps is the injectable variant of ReadChromeCookies.
+// Callers may supply custom KeychainReader and SQLiteQuerier implementations for
+// testing or alternative OS integrations.
+func ReadChromeCookiesWithDeps(profileDir string, domains []string, kr KeychainReader, sq SQLiteQuerier) ([]*proto.NetworkCookieParam, error) {
 	cookiesDB := filepath.Join(profileDir, "Default", "Cookies")
 	if _, err := os.Stat(cookiesDB); os.IsNotExist(err) {
 		return nil, fmt.Errorf("cookies database not found at %s", cookiesDB)
 	}
 
-	password, err := readChromeEncryptionKey()
+	password, err := kr.ReadKey("Chrome Safe Storage", "Chrome")
 	if err != nil {
 		return nil, err
 	}
 	key, err := deriveChromeKey(password)
 	if err != nil {
 		return nil, fmt.Errorf("derive encryption key: %w", err)
-	}
-
-	sqlite3Path, err := exec.LookPath("sqlite3")
-	if err != nil {
-		return nil, fmt.Errorf("sqlite3 not found in PATH")
 	}
 
 	whereClause, err := buildDomainFilter(domains)
@@ -258,10 +297,9 @@ func ReadChromeCookies(profileDir string, domains []string) ([]*proto.NetworkCoo
 		"SELECT host_key, name, hex(encrypted_value), value, path, is_secure, is_httponly, expires_utc, samesite FROM cookies%s;",
 		whereClause,
 	)
-	cmd := exec.Command(sqlite3Path, "-separator", "\t", cookiesDB, query)
-	out, err := cmd.Output()
+	out, err := sq.Query(cookiesDB, "\t", query)
 	if err != nil {
-		return nil, fmt.Errorf("sqlite3 query failed: %w", err)
+		return nil, err
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
