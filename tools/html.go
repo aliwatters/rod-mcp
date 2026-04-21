@@ -43,8 +43,8 @@ var (
 				}
 				html = r.Value.Str()
 			} else {
-				// Element HTML
-				el, err := page.Element(selector)
+				// Element HTML — use timeout so missing selectors return an error instead of hanging.
+				el, err := page.Timeout(defaultSelectorTimeout).Element(selector)
 				if err != nil {
 					return toolErr(fmt.Sprintf("find element %q", selector), err)
 				}

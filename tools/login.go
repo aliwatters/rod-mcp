@@ -135,7 +135,7 @@ func parseLoginParams(args map[string]interface{}, cfg types.Config) (loginParam
 // If userSelector is empty, tries the provided selectors (or defaults) with optional scope prefix.
 func loginFillUsername(page *rod.Page, username, userSelector, scope string, selectors []string) error {
 	if userSelector != "" {
-		el, err := page.Element(userSelector)
+		el, err := page.Timeout(defaultSelectorTimeout).Element(userSelector)
 		if err != nil {
 			return fmt.Errorf("selector %q: %w", userSelector, err)
 		}
@@ -145,11 +145,14 @@ func loginFillUsername(page *rod.Page, username, userSelector, scope string, sel
 	if len(selectors) == 0 {
 		selectors = defaultUsernameSelectors
 	}
+	// Use a short probe timeout when trying multiple fallback selectors — each one
+	// should fail fast if not present rather than blocking the full defaultSelectorTimeout.
+	shortProbe := page.Timeout(2 * time.Second)
 	for _, sel := range selectors {
 		if scope != "" {
 			sel = scope + " " + sel
 		}
-		el, err := page.Element(sel)
+		el, err := shortProbe.Element(sel)
 		if err == nil {
 			if fillErr := loginSmartFill(el, username); fillErr == nil {
 				return nil
@@ -164,9 +167,10 @@ func loginFillUsername(page *rod.Page, username, userSelector, scope string, sel
 
 // loginFillPassword finds and fills the password field, trying a scoped selector as fallback.
 func loginFillPassword(page *rod.Page, password, passSelector, scope string) error {
-	el, err := page.Element(passSelector)
+	timedPage := page.Timeout(defaultSelectorTimeout)
+	el, err := timedPage.Element(passSelector)
 	if err != nil && scope != "" {
-		el, err = page.Element(scope + " " + passSelector)
+		el, err = timedPage.Element(scope + " " + passSelector)
 	}
 	if err != nil {
 		return fmt.Errorf("selector %q: %w", passSelector, err)
@@ -176,9 +180,10 @@ func loginFillPassword(page *rod.Page, password, passSelector, scope string) err
 
 // loginSubmit finds and clicks the submit button, trying a scoped selector as fallback.
 func loginSubmit(page *rod.Page, submitSelector, scope string) error {
-	el, err := page.Element(submitSelector)
+	timedPage := page.Timeout(defaultSelectorTimeout)
+	el, err := timedPage.Element(submitSelector)
 	if err != nil && scope != "" {
-		el, err = page.Element(scope + " " + submitSelector)
+		el, err = timedPage.Element(scope + " " + submitSelector)
 	}
 	if err != nil {
 		return fmt.Errorf("selector %q: %w", submitSelector, err)
@@ -188,7 +193,7 @@ func loginSubmit(page *rod.Page, submitSelector, scope string) error {
 
 // loginOpenTrigger clicks a trigger element and waits for the form container to appear.
 func loginOpenTrigger(page *rod.Page, triggerSelector, formContainer string) error {
-	triggerEl, err := page.Element(triggerSelector)
+	triggerEl, err := page.Timeout(defaultSelectorTimeout).Element(triggerSelector)
 	if err != nil {
 		return fmt.Errorf("find trigger %q: %w", triggerSelector, err)
 	}

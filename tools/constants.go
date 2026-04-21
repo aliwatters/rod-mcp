@@ -33,6 +33,10 @@ const (
 
 	// defaultFormContainerTimeout is the max time to wait for a modal form container to appear.
 	defaultFormContainerTimeout = 5 * time.Second
+
+	// defaultSelectorTimeout is the max time to wait for a CSS selector to match an element.
+	// Without a timeout, page.Element() polls indefinitely and the tool hangs forever.
+	defaultSelectorTimeout = 10 * time.Second
 )
 
 // Default parameter values for tool options.
