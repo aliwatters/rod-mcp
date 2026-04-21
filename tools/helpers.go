@@ -95,14 +95,16 @@ func resolveSnapshotElement(rodCtx *types.Context, args map[string]interface{}, 
 
 // resolveBySelector locates an element using a CSS selector.
 // Supports shadow DOM piercing via >>> combinator (e.g. "my-component >>> .inner").
+// Returns an error if no element is found within defaultSelectorTimeout.
 func resolveBySelector(page *rod.Page, selector string) (*rod.Element, error) {
 	var element *rod.Element
 	var err error
 
+	timedPage := page.Timeout(defaultSelectorTimeout)
 	if strings.Contains(selector, ">>>") {
-		element, err = resolvePiercingSelector(page, selector)
+		element, err = resolvePiercingSelector(timedPage, selector)
 	} else {
-		element, err = page.Element(selector)
+		element, err = timedPage.Element(selector)
 	}
 	if err != nil {
 		info, infoErr := page.Info()

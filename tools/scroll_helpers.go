@@ -8,8 +8,9 @@ import (
 )
 
 // scrollToElement scrolls a CSS-selected element into view and returns its resulting position.
+// Uses defaultSelectorTimeout so the call fails fast if the selector matches no elements.
 func scrollToElement(page *rod.Page, selector string) (*mcp.CallToolResult, error) {
-	el, err := page.Element(selector)
+	el, err := page.Timeout(defaultSelectorTimeout).Element(selector)
 	if err != nil {
 		return toolErr(fmt.Sprintf("scroll to element %q", selector), err)
 	}

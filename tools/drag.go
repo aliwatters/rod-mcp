@@ -33,7 +33,7 @@ var (
 func resolvePosition(page *rod.Page, args map[string]interface{}, selectorKey, xKey, yKey string) (float64, float64, error) {
 	selector := getOptionalStringArg(args, selectorKey)
 	if selector != "" {
-		el, err := page.Element(selector)
+		el, err := page.Timeout(defaultSelectorTimeout).Element(selector)
 		if err != nil {
 			return 0, 0, fmt.Errorf("find element %q: %w", selector, err)
 		}

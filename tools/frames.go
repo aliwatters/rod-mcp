@@ -83,6 +83,7 @@ var (
 // resolvePiercingSelector handles selectors with >>> (shadow DOM piercing combinator).
 // For example: "my-component >>> .inner-button" traverses into shadow roots.
 // Returns the element found after piercing through shadow roots.
+// The page must already have a timeout set by the caller to prevent indefinite hangs.
 func resolvePiercingSelector(page *rod.Page, selector string) (*rod.Element, error) {
 	parts := strings.Split(selector, ">>>")
 	if len(parts) == 1 {

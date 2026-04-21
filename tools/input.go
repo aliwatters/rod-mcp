@@ -174,7 +174,7 @@ var (
 					return toolErr("upload files", err)
 				}
 			} else {
-				element, err = page.Element(selector)
+				element, err = page.Timeout(defaultSelectorTimeout).Element(selector)
 				if err != nil {
 					return toolErr("find file input "+selector, err)
 				}
