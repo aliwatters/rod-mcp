@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod/lib/proto"
@@ -62,10 +63,9 @@ var (
 			}
 			// Wrap function expressions so they get invoked, not just defined.
 			// e.g. "() => document.title" becomes "(() => document.title)()"
-			expression := script
-			if len(script) > 0 && (script[0] == '(' || len(script) > 8 && script[:8] == "function") {
-				expression = "(" + script + ")()"
-			}
+			// Also handles async variants — without wrapping, "async () => ..." evaluates
+			// to a function reference and serializes as "{}" via ReturnByValue.
+			expression := wrapFunctionExpression(script)
 			r, err := proto.RuntimeEvaluate{
 				Expression:            expression,
 				ObjectGroup:           "console",
@@ -264,3 +264,47 @@ var (
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
+
+// wrapFunctionExpression wraps a bare function expression so the CDP
+// Runtime.evaluate call invokes it instead of returning the function reference.
+// Without this, scripts like "() => ..." or "async () => ..." evaluate to a
+// function value which serializes as "{}" under ReturnByValue.
+//
+// Recognised forms (after trimming leading whitespace):
+//   - "(...)" or "(...) => ..."
+//   - "function ..." / "function (...) ..."
+//   - "async () => ..." / "async function ..."
+//
+// Anything else (a statement, a bare identifier, an already-invoked expression)
+// is returned unchanged.
+func wrapFunctionExpression(script string) string {
+	trimmed := strings.TrimLeft(script, " \t\n\r")
+	if trimmed == "" {
+		return script
+	}
+	isFunc := false
+	switch {
+	case trimmed[0] == '(':
+		isFunc = true
+	case strings.HasPrefix(trimmed, "function") &&
+		(len(trimmed) == len("function") || !isIdentChar(trimmed[len("function")])):
+		isFunc = true
+	case strings.HasPrefix(trimmed, "async") &&
+		len(trimmed) > len("async") && !isIdentChar(trimmed[len("async")]):
+		// "async (" or "async function" or "async\t..." — anything where the
+		// next non-identifier char starts a function form.
+		isFunc = true
+	}
+	if !isFunc {
+		return script
+	}
+	return "(" + script + ")()"
+}
+
+// isIdentChar reports whether c can appear inside a JS identifier.
+// Used to ensure we match the "function" / "async" keyword and not a longer
+// identifier like "functionFoo" or "asyncify".
+func isIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_' || c == '$'
+}

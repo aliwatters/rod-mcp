@@ -703,10 +703,37 @@ func TestE2E_Evaluate(t *testing.T) {
 	h.initialize()
 	h.navigate("https://the-internet.herokuapp.com")
 
-	result := h.call("rod_evaluate", map[string]any{
-		"script": "() => document.title",
+	t.Run("sync_arrow", func(t *testing.T) {
+		result := h.call("rod_evaluate", map[string]any{
+			"script": "() => document.title",
+		})
+		assertContainsAny(t, result, "the-internet", "Internet")
 	})
-	assertContainsAny(t, result, "the-internet", "Internet")
+
+	// Regression test for issue #280: async functions and promise-returning
+	// scripts must serialize the resolved value, not the Promise reference.
+	// Before the fix the result was "{}" because the async arrow was treated
+	// as a bare expression that evaluated to a function reference.
+	t.Run("async_arrow_returns_resolved_value", func(t *testing.T) {
+		result := h.callWithTimeout("rod_evaluate", map[string]any{
+			"script": `async () => {
+				await new Promise(r => setTimeout(r, 50));
+				return { ok: true, count: 7 };
+			}`,
+		}, timeoutMedium)
+		assertContains(t, result, `"ok":true`)
+		assertContains(t, result, `"count":7`)
+	})
+
+	t.Run("async_arrow_returns_array", func(t *testing.T) {
+		result := h.callWithTimeout("rod_evaluate", map[string]any{
+			"script": `async () => {
+				await new Promise(r => setTimeout(r, 10));
+				return [1, 2, 3];
+			}`,
+		}, timeoutMedium)
+		assertContains(t, result, "[1,2,3]")
+	})
 }
 
 // TestE2E_Network tests network_requests, response_body, set_headers, intercept, and websocket.
