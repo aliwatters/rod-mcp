@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod/lib/proto"
@@ -62,10 +63,9 @@ var (
 			}
 			// Wrap function expressions so they get invoked, not just defined.
 			// e.g. "() => document.title" becomes "(() => document.title)()"
-			expression := script
-			if len(script) > 0 && (script[0] == '(' || len(script) > 8 && script[:8] == "function") {
-				expression = "(" + script + ")()"
-			}
+			// Also handles async variants — without wrapping, "async () => ..." evaluates
+			// to a function reference and serializes as "{}" via ReturnByValue.
+			expression := wrapFunctionExpression(script)
 			r, err := proto.RuntimeEvaluate{
 				Expression:            expression,
 				ObjectGroup:           "console",
@@ -264,3 +264,99 @@ var (
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
+
+// wrapFunctionExpression wraps a bare function expression so the CDP
+// Runtime.evaluate call invokes it instead of returning the function reference.
+// Without this, scripts like "() => ..." or "async () => ..." evaluate to a
+// function value which serializes as "{}" under ReturnByValue.
+//
+// Recognised forms (after trimming leading whitespace):
+//   - "(...) => ..." (parenthesised arrow / grouped expression that is not
+//     already invoked at the top level)
+//   - "function ..." / "function (...) ..."
+//   - "async (...) => ..." / "async function ..." (with optional whitespace
+//     between "async" and the function form)
+//
+// Anything else — a statement, a bare identifier, an already-invoked IIFE
+// like "(() => 1)()", or a non-function expression starting with "async"
+// such as "async = 1" — is returned unchanged.
+func wrapFunctionExpression(script string) string {
+	trimmed := strings.TrimLeft(script, " \t\n\r")
+	if trimmed == "" {
+		return script
+	}
+	isFunc := false
+	switch {
+	case trimmed[0] == '(':
+		// Skip already-invoked IIFEs: "(...)(...)". Wrapping them would
+		// produce "((...)(...))()", which evaluates the IIFE and then tries
+		// to call its result — almost always a TypeError.
+		isFunc = !isInvokedExpression(trimmed)
+	case strings.HasPrefix(trimmed, "function") &&
+		(len(trimmed) == len("function") || !isIdentChar(trimmed[len("function")])):
+		isFunc = true
+	case strings.HasPrefix(trimmed, "async"):
+		// Only treat as a function form if "async" is followed (after optional
+		// whitespace) by "(" — async arrow — or "function" — async function
+		// expression. Bare "async = 1", "async + 1", or "asyncify()" must not
+		// match, or wrapping produces invalid JS / changes semantics.
+		rest := strings.TrimLeft(trimmed[len("async"):], " \t\n\r")
+		switch {
+		case rest == "":
+			// just the keyword on its own — leave alone.
+		case rest[0] == '(':
+			isFunc = true
+		case strings.HasPrefix(rest, "function") &&
+			(len(rest) == len("function") || !isIdentChar(rest[len("function")])):
+			isFunc = true
+		}
+	}
+	if !isFunc {
+		return script
+	}
+	return "(" + script + ")()"
+}
+
+// isInvokedExpression reports whether a string starting with '(' is an
+// already-invoked expression, i.e. the matching ')' is followed (after
+// optional whitespace) by '('. Examples that return true:
+//
+//	"(() => 1)()", "(function () { ... })()", "(x)(y, z)"
+//
+// Examples that return false:
+//
+//	"(() => 1)", "(x + y)", "() => x"
+//
+// Limitation: this is a simple paren-depth scanner; it does not skip
+// parentheses inside string literals, regex literals, or comments. For
+// rod_evaluate inputs that's acceptable — the inputs are short scripts and
+// the wrapping decision only changes behaviour for unusual edge cases.
+func isInvokedExpression(s string) bool {
+	if len(s) == 0 || s[0] != '(' {
+		return false
+	}
+	depth := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '(':
+			depth++
+		case ')':
+			depth--
+			if depth == 0 {
+				rest := strings.TrimLeft(s[i+1:], " \t\n\r")
+				return len(rest) > 0 && rest[0] == '('
+			}
+		}
+	}
+	return false
+}
+
+// isIdentChar reports whether c can appear inside a JS identifier, using an
+// ASCII-only heuristic. JS identifiers also allow many Unicode code points,
+// but here this only needs to distinguish keywords ("function" / "async")
+// from longer identifiers that share their prefix ("functionFoo",
+// "asyncify"), and ASCII coverage is enough for that.
+func isIdentChar(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+		(c >= '0' && c <= '9') || c == '_' || c == '$'
+}
