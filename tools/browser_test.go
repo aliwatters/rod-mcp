@@ -17,7 +17,7 @@ func TestWrapFunctionExpression(t *testing.T) {
 			want: "(() => document.title)()",
 		},
 		{
-			name: "named function expression",
+			name: "anonymous function expression",
 			in:   "function () { return 1 }",
 			want: "(function () { return 1 })()",
 		},
@@ -57,9 +57,44 @@ func TestWrapFunctionExpression(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "already-invoked IIFE is wrapped (existing behaviour)",
+			name: "already-invoked IIFE is left alone",
 			in:   "(() => 1)()",
-			want: "((() => 1)())()",
+			want: "(() => 1)()",
+		},
+		{
+			name: "already-invoked IIFE with arguments is left alone",
+			in:   "(function () { return 1 })()",
+			want: "(function () { return 1 })()",
+		},
+		{
+			name: "parenthesised arrow that is not invoked is wrapped",
+			in:   "(() => 1)",
+			want: "((() => 1))()",
+		},
+		{
+			name: "async assignment is not wrapped",
+			in:   "async = 1",
+			want: "async = 1",
+		},
+		{
+			name: "async followed by non-function token is not wrapped",
+			in:   "async + 1",
+			want: "async + 1",
+		},
+		{
+			name: "async with extra whitespace before arrow is wrapped",
+			in:   "async   () => 1",
+			want: "(async   () => 1)()",
+		},
+		{
+			name: "async with newline before function keyword is wrapped",
+			in:   "async\nfunction () { return 1 }",
+			want: "(async\nfunction () { return 1 })()",
+		},
+		{
+			name: "asyncFoo identifier is not wrapped",
+			in:   "asyncFoo()",
+			want: "asyncFoo()",
 		},
 	}
 
