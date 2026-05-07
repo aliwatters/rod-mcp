@@ -16,7 +16,9 @@
 #                    $INSTALL_PREFIX/bin/rod-mcp.
 #   XDG_DATA_HOME    Where the version stamp is recorded. Defaults to
 #                    $HOME/.local/share. The stamp file is at
-#                    $XDG_DATA_HOME/rod-mcp/version.
+#                    $XDG_DATA_HOME/rod-mcp/<prefix-slug>/version, scoped
+#                    to the install prefix to prevent false no-ops when
+#                    installing to multiple locations.
 #   FORCE_REBUILD    When set to 1 (or --force passed), forces rebuild.
 #
 # Exit codes:
@@ -68,13 +70,24 @@ fi
 
 # --- Configuration ----------------------------------------------------------
 
+if [[ -z "${HOME:-}" ]]; then
+    echo "Error: HOME is not set; cannot determine default install prefix" >&2
+    exit 1
+fi
+
 INSTALL_PREFIX="${INSTALL_PREFIX:-$HOME/.local}"
 BIN_DIR="$INSTALL_PREFIX/bin"
 ROD_MCP_BINARY="$BIN_DIR/rod-mcp"
 
 XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 STAMP_DIR="$XDG_DATA_HOME/rod-mcp"
-STAMP_FILE="$STAMP_DIR/version"
+
+# The stamp is scoped to the install prefix so that installing to different
+# prefixes doesn't produce a false "nothing to do" for a prefix that was
+# never actually built. We use a sanitised version of the prefix as a subdir.
+_PREFIX_SLUG="${INSTALL_PREFIX//\//_}"
+_PREFIX_SLUG="${_PREFIX_SLUG#_}"   # strip leading underscore from absolute path
+STAMP_FILE="$STAMP_DIR/${_PREFIX_SLUG}/version"
 
 # --- Pre-flight -------------------------------------------------------------
 
@@ -132,7 +145,7 @@ fi
 
 # --- Build ------------------------------------------------------------------
 
-mkdir -p "$BIN_DIR" "$STAMP_DIR"
+mkdir -p "$BIN_DIR" "$(dirname "$STAMP_FILE")"
 
 BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
