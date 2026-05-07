@@ -25,6 +25,16 @@ Rod MCP gives AI agents (Claude, Cursor, etc.) full browser control — navigate
 
 ### Install
 
+**One-command build from source** (no dotfiles required):
+
+```bash
+git clone https://github.com/aliwatters/rod-mcp.git && cd rod-mcp && ./install.sh
+```
+
+This builds the binary and installs it to `~/.local/bin/rod-mcp`. Re-running is a no-op unless HEAD changed; use `--force` or `FORCE_REBUILD=1` to rebuild. Set `INSTALL_PREFIX` to change the install root.
+
+**Or via `go install`:**
+
 ```bash
 go install github.com/aliwatters/rod-mcp@latest
 ```
