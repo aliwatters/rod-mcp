@@ -19,7 +19,7 @@ jobs:
         go-version-file: go.mod
       
     - name: "Create release on GitHub"
-      uses: goreleaser/goreleaser-action@v4
+      uses: goreleaser/goreleaser-action@v7
       with: 
           args: "release -f .goreleaser.yml --clean"
           version: latest
