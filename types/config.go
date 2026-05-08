@@ -22,9 +22,10 @@ func DefaultConfigPath() string {
 	if configHome == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			// Fallback: use "~/.config" relative to cwd as last resort (should
-			// never happen in practice).
-			configHome = filepath.Join(".", ".config")
+			// os.UserHomeDir should never fail in normal operation; log and use a
+			// tmp-based fallback so we still avoid writing into the caller's cwd.
+			log.Warnf("could not determine home directory (%v); using os.TempDir for config", err)
+			configHome = filepath.Join(os.TempDir(), ".config")
 		} else {
 			configHome = filepath.Join(home, ".config")
 		}
@@ -106,7 +107,11 @@ var (
 // It creates any missing parent directories. If the file already exists, it is a no-op.
 func InitDefaultConfig() error {
 	defaultConfigPath := DefaultConfigPath()
-	if exist, _ := utils.PathExists(defaultConfigPath); exist {
+	exist, err := utils.PathExists(defaultConfigPath)
+	if err != nil {
+		log.Warnf("checking config path %s: %v", defaultConfigPath, err)
+	}
+	if exist {
 		return nil
 	}
 
@@ -119,6 +124,7 @@ func InitDefaultConfig() error {
 	if err != nil {
 		return fmt.Errorf("create default config %s: %w", defaultConfigPath, err)
 	}
+	defer f.Close()
 
 	encoder := yaml.NewEncoder(f)
 	defer encoder.Close()

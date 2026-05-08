@@ -35,7 +35,7 @@ func RunCmd() (*SubCfg, error) {
 			&cli.StringFlag{
 				Name:        "config",
 				Aliases:     []string{"c"},
-				Usage:       "use to set Rod MCP Server's config file path, file name is `rod-mcp.yaml`",
+				Usage:       "path to config file (default: $XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml, or ~/.config/rod-mcp/rod-mcp.yaml)",
 				Destination: &subConfig.ConfigPath,
 			}, &cli.StringFlag{
 				Name:        "cdp-endpoint",
