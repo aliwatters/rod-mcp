@@ -13,6 +13,42 @@ import (
 
 const ConfigName = "rod-mcp.yaml"
 
+// DefaultConfigPath returns the canonical config path under XDG_CONFIG_HOME
+// (or ~/.config when XDG_CONFIG_HOME is not set). It never references the
+// current working directory, so rod-mcp can be invoked from any directory
+// without polluting the caller's working tree.
+//
+// XDG_CONFIG_HOME is only used when it is set to an absolute path; relative or
+// tilde-prefixed values are ignored and the home-directory fallback is used
+// instead (a non-absolute XDG_CONFIG_HOME would reintroduce cwd-relative paths).
+func DefaultConfigPath() string {
+	configHome := xdgConfigHome()
+	return filepath.Join(configHome, "rod-mcp", ConfigName)
+}
+
+// xdgConfigHome returns the config base directory to use, resolving the XDG
+// spec (XDG_CONFIG_HOME → $HOME/.config → os.TempDir fallback). It always
+// returns an absolute path.
+func xdgConfigHome() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		// Only accept absolute paths; discard relative or tilde-prefixed values
+		// that would make the config path cwd-relative.
+		if filepath.IsAbs(xdg) {
+			return xdg
+		}
+		log.Warnf("XDG_CONFIG_HOME=%q is not an absolute path; ignoring and using ~/.config instead", xdg)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// os.UserHomeDir should never fail in normal operation; use os.TempDir
+		// so we always return an absolute path and never pollute the cwd.
+		log.Warnf("could not determine home directory (%v); using os.TempDir for config", err)
+		return filepath.Join(os.TempDir(), ".config")
+	}
+	return filepath.Join(home, ".config")
+}
+
 // ImageResponsesMode controls whether inline base64 image data is included in tool results.
 type ImageResponsesMode string
 
@@ -83,36 +119,48 @@ var (
 	}
 )
 
-// InitDefaultConfig Generate the default configuration file
+// InitDefaultConfig generates the default configuration file at DefaultConfigPath.
+// It creates any missing parent directories. If the file already exists, it is a no-op.
 func InitDefaultConfig() error {
-
-	// First, check if the configuration file exists at the default path. If it exists, do not generate the default configuration file.
-	defaultConfigPath := filepath.Join("./", ConfigName)
-	if exist, _ := utils.PathExists(defaultConfigPath); exist {
+	defaultConfigPath := DefaultConfigPath()
+	exist, err := utils.PathExists(defaultConfigPath)
+	if err != nil {
+		log.Warnf("checking config path %s: %v", defaultConfigPath, err)
+	}
+	if exist {
 		return nil
 	}
 
-	// if default config file not exist, create it
-	defaultConfig, err := os.Create(defaultConfigPath)
-	if err != nil {
-		return err
+	// Ensure the parent directory exists before creating the file.
+	// Use 0700 (owner-only) since the config may contain sensitive values
+	// such as authorization tokens in DomainHeaders.
+	if err := os.MkdirAll(filepath.Dir(defaultConfigPath), 0o700); err != nil {
+		return fmt.Errorf("create config dir %s: %w", filepath.Dir(defaultConfigPath), err)
 	}
 
-	encoder := yaml.NewEncoder(defaultConfig)
+	// Use 0600 (owner read/write only) for the same reason.
+	f, err := os.OpenFile(defaultConfigPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create default config %s: %w", defaultConfigPath, err)
+	}
+	defer f.Close()
+
+	encoder := yaml.NewEncoder(f)
 	defer encoder.Close()
 
-	err = encoder.Encode(DefaultConfig)
-	if err != nil {
-		return err
+	if err := encoder.Encode(DefaultConfig); err != nil {
+		return fmt.Errorf("write default config %s: %w", defaultConfigPath, err)
 	}
 	return nil
 }
 
-// LoadConfig Actually load the configuration file
-// if ConfigPath is empty, generate the default configuration file in the current directory
+// LoadConfig loads the configuration file at configPath.
+// When configPath is empty it uses DefaultConfigPath() (XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml),
+// creating the file with built-in defaults if it does not exist yet.
+// The resolved config path is logged at startup so users always know where rod-mcp reads config from.
 func LoadConfig(configPath string) (*Config, error) {
 	if configPath == "" {
-		configPath = filepath.Join("./", ConfigName)
+		configPath = DefaultConfigPath()
 		if err := InitDefaultConfig(); err != nil {
 			return nil, fmt.Errorf("init default config %s: %w", configPath, err)
 		}
@@ -125,10 +173,12 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	if !exist {
-		log.Warnf("config file %s not found, using defaults", configPath)
+		log.Infof("config file not found at %s, using built-in defaults", configPath)
 		config := DefaultConfig
 		return &config, nil
 	}
+
+	log.Infof("loading config from %s", configPath)
 
 	file, err := os.Open(configPath)
 	if err != nil {
