@@ -17,20 +17,36 @@ const ConfigName = "rod-mcp.yaml"
 // (or ~/.config when XDG_CONFIG_HOME is not set). It never references the
 // current working directory, so rod-mcp can be invoked from any directory
 // without polluting the caller's working tree.
+//
+// XDG_CONFIG_HOME is only used when it is set to an absolute path; relative or
+// tilde-prefixed values are ignored and the home-directory fallback is used
+// instead (a non-absolute XDG_CONFIG_HOME would reintroduce cwd-relative paths).
 func DefaultConfigPath() string {
-	configHome := os.Getenv("XDG_CONFIG_HOME")
-	if configHome == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			// os.UserHomeDir should never fail in normal operation; log and use a
-			// tmp-based fallback so we still avoid writing into the caller's cwd.
-			log.Warnf("could not determine home directory (%v); using os.TempDir for config", err)
-			configHome = filepath.Join(os.TempDir(), ".config")
-		} else {
-			configHome = filepath.Join(home, ".config")
-		}
-	}
+	configHome := xdgConfigHome()
 	return filepath.Join(configHome, "rod-mcp", ConfigName)
+}
+
+// xdgConfigHome returns the config base directory to use, resolving the XDG
+// spec (XDG_CONFIG_HOME → $HOME/.config → os.TempDir fallback). It always
+// returns an absolute path.
+func xdgConfigHome() string {
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		// Only accept absolute paths; discard relative or tilde-prefixed values
+		// that would make the config path cwd-relative.
+		if filepath.IsAbs(xdg) {
+			return xdg
+		}
+		log.Warnf("XDG_CONFIG_HOME=%q is not an absolute path; ignoring and using ~/.config instead", xdg)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		// os.UserHomeDir should never fail in normal operation; use os.TempDir
+		// so we always return an absolute path and never pollute the cwd.
+		log.Warnf("could not determine home directory (%v); using os.TempDir for config", err)
+		return filepath.Join(os.TempDir(), ".config")
+	}
+	return filepath.Join(home, ".config")
 }
 
 // ImageResponsesMode controls whether inline base64 image data is included in tool results.
@@ -116,11 +132,14 @@ func InitDefaultConfig() error {
 	}
 
 	// Ensure the parent directory exists before creating the file.
-	if err := os.MkdirAll(filepath.Dir(defaultConfigPath), 0o750); err != nil {
+	// Use 0700 (owner-only) since the config may contain sensitive values
+	// such as authorization tokens in DomainHeaders.
+	if err := os.MkdirAll(filepath.Dir(defaultConfigPath), 0o700); err != nil {
 		return fmt.Errorf("create config dir %s: %w", filepath.Dir(defaultConfigPath), err)
 	}
 
-	f, err := os.Create(defaultConfigPath)
+	// Use 0600 (owner read/write only) for the same reason.
+	f, err := os.OpenFile(defaultConfigPath, os.O_CREATE|os.O_WRONLY|os.O_EXCL, 0o600)
 	if err != nil {
 		return fmt.Errorf("create default config %s: %w", defaultConfigPath, err)
 	}

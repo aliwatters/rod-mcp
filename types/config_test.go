@@ -184,15 +184,41 @@ func TestGetHeadersForURL(t *testing.T) {
 
 // TestDefaultConfigPathNeverUsesCwd verifies that DefaultConfigPath never returns
 // a path under the current working directory. Regression test for #283.
+//
+// The test changes cwd to a fresh temp dir so the assertion is unambiguous
+// regardless of what directory the test runner is invoked from. It uses
+// filepath.Rel rather than strings.HasPrefix to avoid false positives from
+// case-insensitive filesystems or "/tmp/foo" vs "/tmp/foobar" overlaps.
 func TestDefaultConfigPathNeverUsesCwd(t *testing.T) {
-	cwd, err := os.Getwd()
+	// Use an isolated temp dir as cwd so we know exactly what to check against.
+	fakeCwd := t.TempDir()
+	origWd, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("os.Getwd: %v", err)
 	}
+	if err := os.Chdir(fakeCwd); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWd); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	})
+
+	// Point XDG_CONFIG_HOME to a known absolute path outside fakeCwd.
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
 
 	got := DefaultConfigPath()
-	if strings.HasPrefix(got, cwd) {
-		t.Errorf("DefaultConfigPath() = %q starts with cwd %q; must not write into the caller's working directory", got, cwd)
+
+	// filepath.Rel returns a path starting with ".." when got is outside fakeCwd.
+	// If it does NOT start with "..", got is inside (or equal to) fakeCwd.
+	rel, err := filepath.Rel(fakeCwd, got)
+	if err != nil {
+		t.Fatalf("filepath.Rel: %v", err)
+	}
+	if !strings.HasPrefix(rel, "..") {
+		t.Errorf("DefaultConfigPath() = %q is inside cwd %q (rel=%q); must not reference the caller's working directory", got, fakeCwd, rel)
 	}
 }
 
@@ -243,5 +269,24 @@ func TestLoadConfigDoesNotPolluteCwd(t *testing.T) {
 	wantPath := filepath.Join(xdgDir, "rod-mcp", ConfigName)
 	if _, err := os.Stat(wantPath); err != nil {
 		t.Errorf("expected default config at %q, got: %v", wantPath, err)
+	}
+}
+
+// TestDefaultConfigPathIgnoresRelativeXDG verifies that a relative XDG_CONFIG_HOME
+// is rejected and the home-directory fallback is used instead. Addresses the
+// Copilot review finding that a relative XDG path would reintroduce cwd-pollution.
+func TestDefaultConfigPathIgnoresRelativeXDG(t *testing.T) {
+	// Set XDG_CONFIG_HOME to a relative path — must be ignored.
+	t.Setenv("XDG_CONFIG_HOME", ".config")
+
+	got := DefaultConfigPath()
+	if !filepath.IsAbs(got) {
+		t.Errorf("DefaultConfigPath() = %q is not absolute; relative XDG_CONFIG_HOME must be ignored", got)
+	}
+	// The path must NOT start with cwd/.config.
+	cwd, _ := os.Getwd()
+	rel, _ := filepath.Rel(cwd, got)
+	if !strings.HasPrefix(rel, "..") {
+		t.Errorf("DefaultConfigPath() = %q appears to be inside cwd %q; relative XDG_CONFIG_HOME must be ignored", got, cwd)
 	}
 }
