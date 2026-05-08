@@ -3,6 +3,7 @@ package types
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -178,5 +179,69 @@ func TestGetHeadersForURL(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestDefaultConfigPathNeverUsesCwd verifies that DefaultConfigPath never returns
+// a path under the current working directory. Regression test for #283.
+func TestDefaultConfigPathNeverUsesCwd(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+
+	got := DefaultConfigPath()
+	if strings.HasPrefix(got, cwd) {
+		t.Errorf("DefaultConfigPath() = %q starts with cwd %q; must not write into the caller's working directory", got, cwd)
+	}
+}
+
+// TestLoadConfigDoesNotPolluteCwd verifies that calling LoadConfig with an empty
+// configPath (the no-flag default) creates no files in the current working directory.
+// Regression test for #283: rod-mcp was writing rod-mcp.yaml into cwd.
+func TestLoadConfigDoesNotPolluteCwd(t *testing.T) {
+	// Use a temp dir as our synthetic "project repo" cwd so we can check it cleanly.
+	fakeCwd := t.TempDir()
+
+	// Point XDG_CONFIG_HOME at a separate temp dir so InitDefaultConfig has somewhere
+	// to write without touching the user's real ~/.config.
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+
+	// Change the process working directory to fakeCwd for the duration of the test.
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	if err := os.Chdir(fakeCwd); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWd); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	})
+
+	// LoadConfig with empty path must not drop any file in fakeCwd.
+	if _, err := LoadConfig(""); err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	entries, err := os.ReadDir(fakeCwd)
+	if err != nil {
+		t.Fatalf("os.ReadDir: %v", err)
+	}
+	if len(entries) > 0 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("LoadConfig wrote %d file(s) into cwd %q: %v", len(entries), fakeCwd, names)
+	}
+
+	// The config file should have been written under XDG_CONFIG_HOME instead.
+	wantPath := filepath.Join(xdgDir, "rod-mcp", ConfigName)
+	if _, err := os.Stat(wantPath); err != nil {
+		t.Errorf("expected default config at %q, got: %v", wantPath, err)
 	}
 }
