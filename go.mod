@@ -3,7 +3,7 @@ module github.com/aliwatters/rod-mcp
 go 1.25.5
 
 require (
-	github.com/charmbracelet/log v0.4.2
+	github.com/charmbracelet/log v1.0.0
 	github.com/go-rod/rod v0.116.2
 	github.com/mark3labs/mcp-go v0.52.0
 	github.com/urfave/cli/v2 v2.27.7
