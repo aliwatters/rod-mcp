@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	github.com/charmbracelet/log v1.0.0
 	github.com/go-rod/rod v0.116.2
-	github.com/mark3labs/mcp-go v0.52.0
+	github.com/mark3labs/mcp-go v0.54.0
 	github.com/urfave/cli/v2 v2.27.7
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
