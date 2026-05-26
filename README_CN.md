@@ -123,7 +123,7 @@ go install github.com/aliwatters/rod-mcp@latest
 ### 命令行参数
 
 ```
---config, -c       配置文件路径（默认：./rod-mcp.yaml）
+--config, -c       配置文件路径（默认：$XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml，或 ~/.config/rod-mcp/rod-mcp.yaml）
 --headless, -hl    无界面模式运行浏览器
 --vision, -vs      启用视觉模式（基于坐标的工具）
 --compact-snapshot  压缩快照以减少 Token 使用
@@ -135,7 +135,7 @@ go install github.com/aliwatters/rod-mcp@latest
 
 ### 配置文件
 
-创建 `rod-mcp.yaml`（首次运行时自动生成）：
+在 `$XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml`（或 `~/.config/rod-mcp/rod-mcp.yaml`）创建配置文件（首次运行时会自动在该位置生成）：
 
 ```yaml
 mode: text                    # text 或 vision
