@@ -192,7 +192,7 @@ That's it. Your AI agent can now browse the web.
 ### CLI Flags
 
 ```
---config, -c       Path to config file (default: ./rod-mcp.yaml)
+--config, -c       Path to config file (default: $XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml, or ~/.config/rod-mcp/rod-mcp.yaml)
 --headless, -hl    Run browser without GUI
 --vision, -vs      Enable vision mode (coordinate-based tools)
 --compact-snapshot  Reduce snapshot size for fewer tokens
@@ -209,7 +209,7 @@ That's it. Your AI agent can now browse the web.
 
 ### Config File
 
-Create a `rod-mcp.yaml` (one is generated automatically on first run):
+Create a config at `$XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml` (or `~/.config/rod-mcp/rod-mcp.yaml`; one is generated automatically there on first run):
 
 ```yaml
 mode: text                    # text or vision

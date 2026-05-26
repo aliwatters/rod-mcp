@@ -272,6 +272,95 @@ func TestLoadConfigDoesNotPolluteCwd(t *testing.T) {
 	}
 }
 
+func TestLoadConfigUsesLegacyCwdConfigWhenCanonicalMissing(t *testing.T) {
+	fakeCwd := t.TempDir()
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	if err := os.Chdir(fakeCwd); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWd); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	})
+
+	if err := os.WriteFile(filepath.Join(fakeCwd, ConfigName), []byte("mode: vision\nheadless: true\nserverName: Legacy Config\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if cfg.Mode != Vision {
+		t.Errorf("Mode = %q, want %q from legacy config", cfg.Mode, Vision)
+	}
+	if !cfg.Headless {
+		t.Error("Headless = false, want true from legacy config")
+	}
+	if cfg.ServerName != "Legacy Config" {
+		t.Errorf("ServerName = %q, want legacy config value", cfg.ServerName)
+	}
+
+	canonicalPath := filepath.Join(xdgDir, "rod-mcp", ConfigName)
+	if _, err := os.Stat(canonicalPath); !os.IsNotExist(err) {
+		t.Errorf("canonical config should not be created when legacy config exists, stat err: %v", err)
+	}
+}
+
+func TestLoadConfigPrefersCanonicalConfigOverLegacyCwdConfig(t *testing.T) {
+	fakeCwd := t.TempDir()
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdgDir)
+
+	origWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd: %v", err)
+	}
+	if err := os.Chdir(fakeCwd); err != nil {
+		t.Fatalf("os.Chdir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(origWd); err != nil {
+			t.Errorf("restore cwd: %v", err)
+		}
+	})
+
+	if err := os.WriteFile(filepath.Join(fakeCwd, ConfigName), []byte("mode: vision\nheadless: true\nserverName: Legacy Config\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	canonicalPath := filepath.Join(xdgDir, "rod-mcp", ConfigName)
+	if err := os.MkdirAll(filepath.Dir(canonicalPath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(canonicalPath, []byte("mode: text\nheadless: false\nserverName: Canonical Config\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfig("")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if cfg.Mode != Text {
+		t.Errorf("Mode = %q, want %q from canonical config", cfg.Mode, Text)
+	}
+	if cfg.Headless {
+		t.Error("Headless = true, want false from canonical config")
+	}
+	if cfg.ServerName != "Canonical Config" {
+		t.Errorf("ServerName = %q, want canonical config value", cfg.ServerName)
+	}
+}
+
 // TestDefaultConfigPathIgnoresRelativeXDG verifies that a relative XDG_CONFIG_HOME
 // is rejected and the home-directory fallback is used instead. Addresses the
 // Copilot review finding that a relative XDG path would reintroduce cwd-pollution.
