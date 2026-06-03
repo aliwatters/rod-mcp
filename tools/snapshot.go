@@ -25,6 +25,7 @@ const (
 var (
 	Snapshot = mcp.NewTool("rod_snapshot",
 		mcp.WithDescription("Capture accessibility snapshot of the current page, this is better than screenshot"),
+		mcp.WithNumber("max_chars", mcp.Description("Optional character limit for the returned snapshot text. 0 (default) = unlimited (preserves current behaviour). When set to a positive value and the output exceeds the limit, the text is truncated and a truncation notice is appended. Use rod_evaluate for targeted extraction instead of raising this limit.")),
 	)
 
 	Click = mcp.NewTool(ClickToolKey,
@@ -76,7 +77,8 @@ var (
 			if err != nil {
 				return toolErr("capture snapshot", err)
 			}
-			return mcp.NewToolResultText(snapshot), nil
+			maxChars := int(getOptionalFloatArg(req.GetArguments(), "max_chars", 0))
+			return mcp.NewToolResultText(applyMaxChars(snapshot, maxChars)), nil
 		}
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
