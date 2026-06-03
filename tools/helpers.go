@@ -27,6 +27,24 @@ func truncateContent(s string, maxLen int) (string, bool) {
 	return s[:maxLen], true
 }
 
+// applyMaxChars applies an opt-in character limit to content returned by tools.
+//
+// maxChars == 0 means unlimited — the full string is returned unchanged.
+// maxChars  > 0 truncates s to that many characters and appends a notice that
+// includes both the limit and the original length, pointing callers toward
+// rod_evaluate for targeted extraction.
+//
+// Deferred decision: whether to make a non-zero default the standard is a
+// maintainer choice (behaviour-change) tracked on aliwatters/rod-mcp#295.
+// This helper implements only the opt-in path.
+func applyMaxChars(s string, maxChars int) string {
+	if maxChars <= 0 || len(s) <= maxChars {
+		return s
+	}
+	return fmt.Sprintf("%s\n\n…[truncated: %d of %d chars; use rod_evaluate for targeted extraction]",
+		s[:maxChars], maxChars, len(s))
+}
+
 // checkNavigationStatus inspects captured network requests for the navigated URL
 // and returns an error if the main document response has a 4xx or 5xx status code.
 // This allows tools to fail fast instead of waiting for timeout on error pages.

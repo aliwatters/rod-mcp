@@ -92,6 +92,24 @@ func TestSelectorToolDefinition(t *testing.T) {
 	}
 }
 
+func TestSnapshotToolMaxCharsParam(t *testing.T) {
+	props := Snapshot.InputSchema.Properties
+	if props == nil {
+		t.Fatal("Snapshot tool has no properties")
+	}
+
+	if _, ok := props["max_chars"]; !ok {
+		t.Error("Snapshot tool missing 'max_chars' property")
+	}
+
+	// max_chars must be optional — not in the required list.
+	for _, r := range Snapshot.InputSchema.Required {
+		if r == "max_chars" {
+			t.Error("Snapshot tool 'max_chars' should not be required")
+		}
+	}
+}
+
 func TestSnapshotToolsRegistered(t *testing.T) {
 	// Verify all snapshot tools are in the Snapshots slice
 	expectedTools := map[string]bool{

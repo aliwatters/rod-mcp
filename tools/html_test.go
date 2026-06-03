@@ -12,7 +12,7 @@ func TestHTMLToolDefinition(t *testing.T) {
 		t.Fatal("HTML tool has no properties")
 	}
 
-	for _, param := range []string{"selector", "outer"} {
+	for _, param := range []string{"selector", "outer", "max_chars"} {
 		if _, ok := props[param]; !ok {
 			t.Errorf("HTML tool missing %q property", param)
 		}
