@@ -108,7 +108,7 @@ var (
 
 	DefaultConfig = Config{
 		BrowserBinPath: "",
-		Headless:       false,
+		Headless:       true,
 		BrowserTempDir: DefaultBrowserTempDir,
 		NoSandbox:      false,
 		Proxy:          "",

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
@@ -13,12 +14,15 @@ import (
 	"github.com/aliwatters/rod-mcp/utils"
 )
 
+var launchBrowserFunc = launchBrowser
+
 // launchBrowser starts a new Chrome instance. When a user-data-dir is configured
 // and cloning is enabled (the default), the profile is cloned to a temp directory
 // whose path is returned as clonedDir so the caller can clean it up on exit.
 func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clonedDir string, err error) {
 
 	if cfg.CDPEndpoint != "" {
+		log.Infof("browser launch: connecting to configured CDP endpoint")
 		b, err := controlBrowser(ctx, cfg.CDPEndpoint)
 		return b, "", err
 	}
@@ -41,10 +45,13 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		return nil, "", err
 	}
 
+	log.Infof("browser launch: starting local Chrome headless=%t", cfg.Headless)
+	launchStart := time.Now()
 	controlUrl, err := browserLauncher.Launch()
 	if err != nil {
 		return nil, "", fmt.Errorf("launch local browser: %w", err)
 	}
+	log.Infof("browser launch: local Chrome returned CDP URL after %s", time.Since(launchStart).Round(time.Millisecond))
 	b, err := controlBrowser(ctx, controlUrl)
 	if err != nil {
 		return nil, "", err

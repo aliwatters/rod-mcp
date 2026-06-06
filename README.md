@@ -213,7 +213,7 @@ Create a config at `$XDG_CONFIG_HOME/rod-mcp/rod-mcp.yaml` (or `~/.config/rod-mc
 
 ```yaml
 mode: text                    # text or vision
-headless: false               # run without GUI
+headless: true                # run without GUI
 browserBinPath: ""            # path to Chrome/Chromium (auto-detected)
 browserTempDir: ./rod/browser # browser profile directory
 noSandbox: false              # disable Chrome sandbox

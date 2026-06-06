@@ -139,7 +139,7 @@ go install github.com/aliwatters/rod-mcp@latest
 
 ```yaml
 mode: text                    # text 或 vision
-headless: false               # 无界面模式
+headless: true                # 无界面模式
 browserBinPath: ""            # Chrome/Chromium 路径（自动检测）
 browserTempDir: ./rod/browser # 浏览器配置目录
 noSandbox: false              # 禁用 Chrome 沙箱

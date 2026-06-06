@@ -29,6 +29,9 @@ func TestLoadConfigMergesDefaults(t *testing.T) {
 	if cfg.ImageResponses != ImageResponsesAllow {
 		t.Errorf("ImageResponses = %q, want %q (from DefaultConfig)", cfg.ImageResponses, ImageResponsesAllow)
 	}
+	if !cfg.Headless {
+		t.Error("Headless = false, want true from DefaultConfig")
+	}
 }
 
 func TestLoadConfigAcceptsCustomFilename(t *testing.T) {
