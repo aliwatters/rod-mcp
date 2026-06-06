@@ -5,8 +5,13 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/go-rod/rod"
 )
 
 // newTestContext creates a Context with a default Config suitable for unit tests.
@@ -304,6 +309,107 @@ func TestIsClosedBrowserSessionError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInitial_LocalLaunchFailureBackoffSuppressesHotRetry(t *testing.T) {
+	ctx := newTestContext()
+	launchErr := errors.New("chrome exited during registration")
+	var attempts int32
+	withLaunchBrowserFunc(t, func(context.Context, Config) (*rod.Browser, string, error) {
+		atomic.AddInt32(&attempts, 1)
+		return nil, "", launchErr
+	})
+
+	err := ctx.initial()
+	if err == nil {
+		t.Fatal("initial: expected launch error")
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("launch attempts after first failure = %d, want 1", got)
+	}
+
+	err = ctx.initial()
+	if err == nil {
+		t.Fatal("initial during backoff: expected error")
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("launch attempts during backoff = %d, want 1", got)
+	}
+	if !strings.Contains(err.Error(), "browser launch suppressed") {
+		t.Fatalf("backoff error = %q, want suppressed launch message", err.Error())
+	}
+	if !errors.Is(err, launchErr) {
+		t.Fatalf("backoff error should wrap previous launch error, got %v", err)
+	}
+}
+
+func TestInitial_LocalLaunchBackoffIsSerializedAcrossConcurrentCalls(t *testing.T) {
+	ctx := newTestContext()
+	launchErr := errors.New("chrome launch failed")
+	var attempts int32
+	withLaunchBrowserFunc(t, func(context.Context, Config) (*rod.Browser, string, error) {
+		atomic.AddInt32(&attempts, 1)
+		time.Sleep(20 * time.Millisecond)
+		return nil, "", launchErr
+	})
+
+	const callers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, callers)
+	for range callers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- ctx.initial()
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err == nil {
+			t.Fatal("initial: expected all concurrent callers to receive errors")
+		}
+	}
+	if got := atomic.LoadInt32(&attempts); got != 1 {
+		t.Fatalf("concurrent launch attempts = %d, want 1", got)
+	}
+}
+
+func TestInitial_CDPEndpointFailuresDoNotUseManagedLaunchBackoff(t *testing.T) {
+	ctx := NewContext(context.Background(), Config{
+		Mode:        Text,
+		Headless:    true,
+		CDPEndpoint: "http://127.0.0.1:9222",
+	})
+	launchErr := errors.New("connect refused")
+	var attempts int32
+	withLaunchBrowserFunc(t, func(context.Context, Config) (*rod.Browser, string, error) {
+		atomic.AddInt32(&attempts, 1)
+		return nil, "", launchErr
+	})
+
+	for i := 0; i < 2; i++ {
+		err := ctx.initial()
+		if err == nil {
+			t.Fatal("initial: expected CDP connection error")
+		}
+		if strings.Contains(err.Error(), "browser launch suppressed") {
+			t.Fatalf("CDP error unexpectedly used managed-launch backoff: %v", err)
+		}
+	}
+	if got := atomic.LoadInt32(&attempts); got != 2 {
+		t.Fatalf("CDP launch attempts = %d, want 2", got)
+	}
+}
+
+func withLaunchBrowserFunc(t *testing.T, fn func(context.Context, Config) (*rod.Browser, string, error)) {
+	t.Helper()
+	prev := launchBrowserFunc
+	launchBrowserFunc = fn
+	t.Cleanup(func() {
+		launchBrowserFunc = prev
+	})
 }
 
 func TestClose_WithTempDir_Cleanup(t *testing.T) {

@@ -39,6 +39,10 @@ const (
 	cleanupRetryCount = 3
 	// cleanupRetryDelay is the wait between browser temp dir removal retries.
 	cleanupRetryDelay = 200 * time.Millisecond
+	// launchBackoffInitial is the first delay after a managed local browser launch failure.
+	launchBackoffInitial = time.Second
+	// launchBackoffMax caps managed local browser launch retry delays.
+	launchBackoffMax = 30 * time.Second
 )
 
 type Context struct {
@@ -58,6 +62,12 @@ type Context struct {
 	keepaliveCancel func()
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
+	// launchFailures tracks consecutive managed local Chrome launch failures.
+	launchFailures int
+	// nextLaunchAt is the earliest time a managed local Chrome launch may be retried.
+	nextLaunchAt time.Time
+	// lastLaunchErr is returned while managed local Chrome launch backoff is active.
+	lastLaunchErr error
 
 	// snapshotLock serialises access to the cached ARIA snapshot.
 	// Lock ordering: always acquire snapshotLock before browserLock if both are
@@ -80,6 +90,8 @@ type Context struct {
 	interceptLock sync.Mutex
 	intercept     *networkInterceptor
 }
+
+var browserLaunchNow = time.Now
 
 func NewContext(ctx context.Context, cfg Config) *Context {
 	return &Context{
@@ -140,29 +152,40 @@ func (ctx *Context) initial() error {
 func (ctx *Context) initLocked() (bool, error) {
 	var err error
 	recovered := false
+	launchReason := "initial browser launch"
 	if ctx.browser != nil {
 		if err := ctx.checkBrowserAliveLocked(); err != nil {
 			if !isClosedBrowserSessionError(err) {
 				return false, fmt.Errorf("check browser session: %w", err)
 			}
-			log.Warnf("browser session ended; relaunching on next action: %s", err)
+			log.Warnf("browser session ended or crashed; relaunching on next action: %s", err)
 			if closeErr := ctx.closeBrowser(); closeErr != nil {
 				log.Warnf("drop stale browser session after close error: %s", closeErr)
 				ctx.dropBrowserStateLocked()
 			}
 			recovered = true
+			launchReason = "relaunch after ended browser session"
 		}
 	}
 	if ctx.browser == nil {
-		ctx.browser, ctx.clonedProfileDir, err = launchBrowser(ctx.stdContext, ctx.config)
-		if err != nil {
-			return recovered, fmt.Errorf("launch browser: %w", err)
+		if err := ctx.launchBrowserLocked(launchReason); err != nil {
+			return recovered, err
 		}
 		ctx.startKeepalive()
 		ctx.page, err = ctx.createPage()
 		if err != nil {
+			pageErr := fmt.Errorf("create initial page: %w", err)
+			log.Warnf("browser launch failed after connect: reason=%s error=%s", launchReason, pageErr)
+			if ctx.isManagedLocalLaunchLocked() {
+				ctx.recordLaunchFailureLocked(launchReason, pageErr)
+			}
+			if closeErr := ctx.closeBrowser(); closeErr != nil {
+				log.Warnf("close browser after initial page failure: %s", closeErr)
+				ctx.dropBrowserStateLocked()
+			}
 			return recovered, fmt.Errorf("create initial page: %w", err)
 		}
+		ctx.recordLaunchSuccessLocked(launchReason)
 		return recovered, nil
 	}
 	if ctx.page == nil {
@@ -173,6 +196,96 @@ func (ctx *Context) initLocked() (bool, error) {
 	}
 
 	return recovered, nil
+}
+
+func (ctx *Context) isManagedLocalLaunchLocked() bool {
+	return ctx.config.CDPEndpoint == ""
+}
+
+func (ctx *Context) launchBrowserLocked(reason string) error {
+	if ctx.isManagedLocalLaunchLocked() {
+		if err := ctx.checkLaunchBackoffLocked(reason); err != nil {
+			return err
+		}
+	}
+
+	log.Infof(
+		"browser launch starting: reason=%s mode=%s headless=%t cdp=%t",
+		reason,
+		ctx.config.Mode,
+		ctx.config.Headless,
+		ctx.config.CDPEndpoint != "",
+	)
+	browser, clonedDir, err := launchBrowserFunc(ctx.stdContext, ctx.config)
+	if err != nil {
+		log.Warnf("browser launch failed: reason=%s error=%s", reason, err)
+		if ctx.isManagedLocalLaunchLocked() {
+			ctx.recordLaunchFailureLocked(reason, err)
+		}
+		return fmt.Errorf("launch browser: %w", err)
+	}
+	ctx.browser = browser
+	ctx.clonedProfileDir = clonedDir
+	return nil
+}
+
+func (ctx *Context) checkLaunchBackoffLocked(reason string) error {
+	if ctx.nextLaunchAt.IsZero() || !browserLaunchNow().Before(ctx.nextLaunchAt) {
+		return nil
+	}
+	remaining := ctx.nextLaunchAt.Sub(browserLaunchNow()).Round(time.Millisecond)
+	if remaining < 0 {
+		remaining = 0
+	}
+	log.Warnf(
+		"browser launch suppressed during backoff: reason=%s failures=%d retryAfter=%s remaining=%s",
+		reason,
+		ctx.launchFailures,
+		ctx.nextLaunchAt.Format(time.RFC3339),
+		remaining,
+	)
+	if ctx.lastLaunchErr == nil {
+		return fmt.Errorf("browser launch suppressed after %d failed attempt(s); retry after %s", ctx.launchFailures, ctx.nextLaunchAt.Format(time.RFC3339))
+	}
+	return fmt.Errorf("browser launch suppressed after %d failed attempt(s); retry after %s: %w", ctx.launchFailures, ctx.nextLaunchAt.Format(time.RFC3339), ctx.lastLaunchErr)
+}
+
+func (ctx *Context) recordLaunchFailureLocked(reason string, err error) {
+	ctx.launchFailures++
+	delay := launchBackoffInitial
+	for i := 1; i < ctx.launchFailures && delay < launchBackoffMax; i++ {
+		delay *= 2
+		if delay > launchBackoffMax {
+			delay = launchBackoffMax
+			break
+		}
+	}
+	ctx.nextLaunchAt = browserLaunchNow().Add(delay)
+	ctx.lastLaunchErr = err
+	log.Warnf(
+		"browser launch backoff set: reason=%s failures=%d delay=%s retryAfter=%s error=%s",
+		reason,
+		ctx.launchFailures,
+		delay,
+		ctx.nextLaunchAt.Format(time.RFC3339),
+		err,
+	)
+}
+
+func (ctx *Context) recordLaunchSuccessLocked(reason string) {
+	if ctx.launchFailures > 0 {
+		log.Infof("browser launch recovered: reason=%s previousFailures=%d", reason, ctx.launchFailures)
+	}
+	ctx.launchFailures = 0
+	ctx.nextLaunchAt = time.Time{}
+	ctx.lastLaunchErr = nil
+	log.Infof(
+		"browser launch succeeded: reason=%s mode=%s headless=%t cdp=%t",
+		reason,
+		ctx.config.Mode,
+		ctx.config.Headless,
+		ctx.config.CDPEndpoint != "",
+	)
 }
 
 func (ctx *Context) checkBrowserAliveLocked() error {
