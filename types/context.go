@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -44,16 +46,16 @@ type Context struct {
 
 	// browserLock serialises access to all browser-lifecycle fields:
 	// browser, page, pageCancel, keepaliveCancel, clonedProfileDir, and config.
-	browserLock      sync.Mutex
-	config           Config
-	browser          *rod.Browser
-	page             *rod.Page
+	browserLock sync.Mutex
+	config      Config
+	browser     *rod.Browser
+	page        *rod.Page
 	// pageCancel cancels event-listener goroutines attached to the current page.
 	// It is set when attachEventListeners creates a cancelable page copy, and
 	// called in closePage before the page is closed.
-	pageCancel       func()
+	pageCancel func()
 	// keepaliveCancel stops the CDP keepalive goroutine when the browser is closed.
-	keepaliveCancel  func()
+	keepaliveCancel func()
 	// clonedProfileDir is the temp directory from profile cloning, cleaned up on Close.
 	clonedProfileDir string
 
@@ -93,15 +95,17 @@ func (ctx *Context) EnsurePage() (*rod.Page, error) {
 	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	return ctx.page, nil
 }
 
 func (ctx *Context) ControlledPage() (*rod.Page, error) {
-	ctx.browserLock.Lock()
-	defer ctx.browserLock.Unlock()
-	if err := ctx.initLocked(); err != nil {
+	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	if ctx.page == nil {
 		return nil, errors.New("no active tab, call rod_navigate first")
 	}
@@ -110,11 +114,11 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 
 // ControlledBrowser returns the browser instance, or an error if no browser is running.
 func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
-	ctx.browserLock.Lock()
-	defer ctx.browserLock.Unlock()
-	if err := ctx.initLocked(); err != nil {
+	if err := ctx.initial(); err != nil {
 		return nil, err
 	}
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
 	if ctx.browser == nil {
 		return nil, errors.New("no browser running, call rod_navigate first")
 	}
@@ -123,34 +127,98 @@ func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
 
 func (ctx *Context) initial() error {
 	ctx.browserLock.Lock()
-	defer ctx.browserLock.Unlock()
-	return ctx.initLocked()
+	recovered, err := ctx.initLocked()
+	ctx.browserLock.Unlock()
+	if recovered {
+		ctx.InvalidateSnapshot()
+	}
+	return err
 }
 
 // initLocked performs lazy initialization of the browser and page.
 // Must be called with browserLock held.
-func (ctx *Context) initLocked() error {
+func (ctx *Context) initLocked() (bool, error) {
 	var err error
+	recovered := false
+	if ctx.browser != nil {
+		if err := ctx.checkBrowserAliveLocked(); err != nil {
+			if !isClosedBrowserSessionError(err) {
+				return false, fmt.Errorf("check browser session: %w", err)
+			}
+			log.Warnf("browser session ended; relaunching on next action: %s", err)
+			if closeErr := ctx.closeBrowser(); closeErr != nil {
+				log.Warnf("drop stale browser session after close error: %s", closeErr)
+				ctx.dropBrowserStateLocked()
+			}
+			recovered = true
+		}
+	}
 	if ctx.browser == nil {
 		ctx.browser, ctx.clonedProfileDir, err = launchBrowser(ctx.stdContext, ctx.config)
 		if err != nil {
-			return fmt.Errorf("launch browser: %w", err)
+			return recovered, fmt.Errorf("launch browser: %w", err)
 		}
 		ctx.startKeepalive()
 		ctx.page, err = ctx.createPage()
 		if err != nil {
-			return fmt.Errorf("create initial page: %w", err)
+			return recovered, fmt.Errorf("create initial page: %w", err)
 		}
-		return nil
+		return recovered, nil
 	}
 	if ctx.page == nil {
 		ctx.page, err = ctx.createPage()
 		if err != nil {
-			return fmt.Errorf("create page: %w", err)
+			return recovered, fmt.Errorf("create page: %w", err)
 		}
 	}
 
-	return nil
+	return recovered, nil
+}
+
+func (ctx *Context) checkBrowserAliveLocked() error {
+	checkCtx, cancel := context.WithTimeout(ctx.stdContext, 5*time.Second)
+	defer cancel()
+	_, err := proto.BrowserGetVersion{}.Call(ctx.browser.Context(checkCtx))
+	return err
+}
+
+func isClosedBrowserSessionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, net.ErrClosed) || errors.Is(err, io.ErrClosedPipe) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"use of closed network connection",
+		"browser has been closed",
+		"connection reset by peer",
+		"connection is closed",
+		"broken pipe",
+		"session closed",
+		"target closed",
+		"websocket: close",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ctx *Context) dropBrowserStateLocked() {
+	if ctx.keepaliveCancel != nil {
+		ctx.keepaliveCancel()
+		ctx.keepaliveCancel = nil
+	}
+	if ctx.pageCancel != nil {
+		ctx.pageCancel()
+		ctx.pageCancel = nil
+	}
+	ctx.intercept.Cancel()
+	ctx.page = nil
+	ctx.browser = nil
 }
 
 func (ctx *Context) CurrentMode() Mode {
@@ -282,6 +350,10 @@ func (ctx *Context) closePage() error {
 	ctx.intercept.Cancel()
 	err := ctx.page.Close()
 	if err != nil {
+		if isClosedBrowserSessionError(err) {
+			ctx.page = nil
+			return nil
+		}
 		return fmt.Errorf("close page: %w", err)
 	}
 	ctx.page = nil
@@ -306,6 +378,10 @@ func (ctx *Context) closeBrowser() error {
 
 	err = ctx.browser.Close()
 	if err != nil {
+		if isClosedBrowserSessionError(err) {
+			ctx.browser = nil
+			return nil
+		}
 		return fmt.Errorf("close browser: %w", err)
 	}
 	ctx.browser = nil

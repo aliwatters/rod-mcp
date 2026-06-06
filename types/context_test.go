@@ -2,6 +2,9 @@ package types
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"testing"
 	"time"
 )
@@ -271,6 +274,35 @@ func TestStartKeepalive_NilBrowser(t *testing.T) {
 	ctx.startKeepalive()
 	if ctx.keepaliveCancel != nil {
 		t.Error("startKeepalive with nil browser should not set keepaliveCancel")
+	}
+}
+
+func TestIsClosedBrowserSessionError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "closed network connection",
+			err:  errors.New("write tcp 127.0.0.1:62624->127.0.0.1:62622: use of closed network connection"),
+			want: true,
+		},
+		{name: "net closed", err: net.ErrClosed, want: true},
+		{name: "closed pipe", err: io.ErrClosedPipe, want: true},
+		{name: "browser closed", err: errors.New("browser has been closed"), want: true},
+		{name: "connection reset", err: errors.New("read tcp: connection reset by peer"), want: true},
+		{name: "deadline", err: context.DeadlineExceeded, want: false},
+		{name: "connection refused", err: errors.New("dial tcp 127.0.0.1:9222: connect: connection refused"), want: false},
+		{name: "nil", err: nil, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isClosedBrowserSessionError(tt.err); got != tt.want {
+				t.Errorf("isClosedBrowserSessionError(%v) = %t, want %t", tt.err, got, tt.want)
+			}
+		})
 	}
 }
 
