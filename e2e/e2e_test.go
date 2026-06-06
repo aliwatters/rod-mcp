@@ -395,6 +395,16 @@ func TestE2E_Navigation(t *testing.T) {
 			t.Errorf("expected fast failure but took %v", elapsed)
 		}
 	})
+
+	t.Run("close_browser_then_navigate_relaunches", func(t *testing.T) {
+		result := h.call("rod_close_browser", nil)
+		assertContains(t, result, "Close browser successfully")
+
+		result = h.callWithTimeout("rod_navigate", map[string]any{
+			"url": "https://the-internet.herokuapp.com",
+		}, timeoutLong)
+		assertContains(t, result, "Navigated to")
+	})
 }
 
 // TestE2E_Login tests the rod_login tool.
