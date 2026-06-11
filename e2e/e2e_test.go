@@ -77,8 +77,10 @@ func newHarness(t *testing.T) *harness {
 
 	args := []string{"--no-banner"}
 
-	// In CI, run headless (no X server available)
-	if os.Getenv("CI") != "" {
+	// Default to headless: headed Chrome on macOS can abort in
+	// TransformProcessType under concurrent launches, and CI has no X server.
+	// Set ROD_MCP_E2E_HEADED only for local visual debugging.
+	if os.Getenv("ROD_MCP_E2E_HEADED") == "" {
 		args = append(args, "--headless")
 	}
 
