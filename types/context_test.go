@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // newTestContext creates a Context with a default Config suitable for unit tests.
@@ -270,6 +271,34 @@ func TestKeepaliveInterval(t *testing.T) {
 	// But not so frequent that it wastes resources.
 	if keepaliveInterval < 1*time.Minute {
 		t.Errorf("keepaliveInterval = %v, should be at least 1 minute", keepaliveInterval)
+	}
+}
+
+func TestExecuteRecoversHandlerPanic(t *testing.T) {
+	ctx := newTestContext()
+	handler := ctx.Execute(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		panic("key not defined")
+	}, ToolHandlerCallOpts{})
+
+	result, err := handler(context.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("Execute returned unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("Execute returned nil result")
+	}
+	if !result.IsError {
+		t.Fatal("Execute panic recovery should return an MCP error result")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("Execute panic recovery returned no content")
+	}
+	text, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("Execute panic recovery content type = %T, want mcp.TextContent", result.Content[0])
+	}
+	if !strings.Contains(text.Text, "key not defined") {
+		t.Fatalf("Execute panic recovery text = %q, want panic value", text.Text)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/go-rod/rod"
-	"github.com/go-rod/rod/lib/input"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
@@ -16,9 +15,9 @@ import (
 )
 
 const (
-	PressKeyToolKey    = "rod_press"
-	TypeToolKey        = "rod_type"
-	FileUploadToolKey  = "rod_file_upload"
+	PressKeyToolKey   = "rod_press"
+	TypeToolKey       = "rod_type"
+	FileUploadToolKey = "rod_file_upload"
 )
 
 var (
@@ -120,9 +119,9 @@ var (
 			}
 			delay := time.Duration(delayMs * float64(time.Millisecond))
 
-			// Type each character with a delay between keystrokes.
+			// Insert each rune with a delay between text input events.
 			for _, ch := range text {
-				if err := page.Keyboard.Press(input.Key(ch)); err != nil {
+				if err := page.InsertText(string(ch)); err != nil {
 					return toolErr(fmt.Sprintf("type character %q", string(ch)), err)
 				}
 				if delay > 0 {

@@ -486,6 +486,29 @@ func TestE2E_Input(t *testing.T) {
 		assertContainsAny(t, result, "Press key", "pressed", "successfully")
 	})
 
+	t.Run("type_unicode", func(t *testing.T) {
+		h.navigate("https://the-internet.herokuapp.com")
+		text := "em—dash, é, “smart”, 👍"
+
+		result := h.call("rod_evaluate", map[string]any{
+			"script": `() => {
+				document.body.innerHTML = '<input id="unicode-input" />';
+				const input = document.querySelector("#unicode-input");
+				input.focus();
+				return document.activeElement === input ? "focused" : "not-focused";
+			}`,
+		})
+		assertContains(t, result, "focused")
+
+		result = h.call("rod_type", map[string]any{"text": text, "delay": 0})
+		assertContains(t, result, "Typed")
+
+		result = h.call("rod_evaluate", map[string]any{
+			"script": `() => document.querySelector("#unicode-input").value`,
+		})
+		assertContains(t, result, text)
+	})
+
 	t.Run("hover_via_evaluate", func(t *testing.T) {
 		h.navigate("https://the-internet.herokuapp.com/hovers")
 		result := h.call("rod_evaluate", map[string]any{
