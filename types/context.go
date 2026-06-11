@@ -349,8 +349,16 @@ func (ctx *Context) ClosePage() error {
 }
 
 func (ctx *Context) Execute(handlerFunc server.ToolHandlerFunc, handlerCallOpts ToolHandlerCallOpts) server.ToolHandlerFunc {
-	return func(stdCtx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		result, err := handlerFunc(stdCtx, request)
+	return func(stdCtx context.Context, request mcp.CallToolRequest) (result *mcp.CallToolResult, err error) {
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				log.Errorf("Tool handler panic: %v", recovered)
+				result = mcp.NewToolResultError(fmt.Sprintf("tool handler panic: %v", recovered))
+				err = nil
+			}
+		}()
+
+		result, err = handlerFunc(stdCtx, request)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
