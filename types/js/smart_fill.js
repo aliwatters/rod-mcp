@@ -23,6 +23,39 @@
         return el.value !== undefined ? el.value : el.textContent;
     }
 
+    function isContentEditableElement(el) {
+        return !!(el && (el.isContentEditable || el.getAttribute("contenteditable") === "true"));
+    }
+
+    function createInputEvent(type, data, inputType, cancelable) {
+        var init = {
+            bubbles: true,
+            cancelable: cancelable,
+            composed: true,
+            data: data,
+            inputType: inputType
+        };
+        try {
+            return new InputEvent(type, init);
+        } catch (_) {
+            return new Event(type, {
+                bubbles: true,
+                cancelable: cancelable,
+                composed: true
+            });
+        }
+    }
+
+    function selectEditableContents(el) {
+        var selection = window.getSelection();
+        if (!selection) return;
+
+        var range = document.createRange();
+        range.selectNodeContents(el);
+        selection.removeAllRanges();
+        selection.addRange(range);
+    }
+
     // Helper: trigger React's onChange via internal __reactProps$.
     // This ensures React's state is synchronized with the DOM value
     // even when the fill method (clipboard, standard) doesn't fully
@@ -75,12 +108,35 @@
         return getValue(el) === value;
     }
 
+    // Strategy 1a: Observable contenteditable input for ProseMirror/Slate/Lexical.
+    function tryContentEditableInput(el, value) {
+        selectEditableContents(el);
+
+        var beforeDelete = createInputEvent("beforeinput", null, "deleteContentBackward", true);
+        var allowDelete = el.dispatchEvent(beforeDelete);
+        if (allowDelete) {
+            document.execCommand("delete", false, null);
+        }
+        el.dispatchEvent(createInputEvent("input", null, "deleteContentBackward", false));
+
+        var beforeInsert = createInputEvent("beforeinput", value, "insertText", true);
+        var allowInsert = el.dispatchEvent(beforeInsert);
+        if (allowInsert && getValue(el) !== value) {
+            document.execCommand("insertText", false, value);
+        }
+        el.dispatchEvent(createInputEvent("input", value, "insertText", false));
+
+        return getValue(el) === value;
+    }
+
     // Strategy 2: ClipboardEvent + execCommand (works for React controlled inputs).
     function tryClipboardPaste(el, value) {
         // Select all existing text first.
         if (el.select) { el.select(); }
         else if (el.setSelectionRange) {
             el.setSelectionRange(0, (el.value || el.textContent || "").length);
+        } else if (isContentEditableElement(el)) {
+            selectEditableContents(el);
         }
 
         // Try execCommand insertText first (works in most browsers).
@@ -90,6 +146,7 @@
 
         // Fallback: synthetic ClipboardEvent paste.
         if (el.select) { el.select(); }
+        else if (isContentEditableElement(el)) { selectEditableContents(el); }
         var dt = new DataTransfer();
         dt.setData("text/plain", value);
         var pasteEvent = new ClipboardEvent("paste", {
@@ -107,6 +164,7 @@
     function tryKeyByKey(el, value) {
         // Clear existing value.
         if (el.select) { el.select(); }
+        else if (isContentEditableElement(el)) { selectEditableContents(el); }
         document.execCommand("delete", false, null);
 
         for (var i = 0; i < value.length; i++) {
@@ -126,7 +184,15 @@
     var reactControlled = isReactControlled(el);
     var method = "";
 
-    if (!reactControlled) {
+    if (isContentEditableElement(el)) {
+        if (tryContentEditableInput(el, value)) {
+            method = "contenteditable_input";
+        } else if (tryClipboardPaste(el, value)) {
+            method = "contenteditable_clipboard_fallback";
+        } else if (tryKeyByKey(el, value)) {
+            method = "contenteditable_keybykey_fallback";
+        }
+    } else if (!reactControlled) {
         // Non-React: try standard first.
         if (tryStandardInput(el, value)) {
             method = "standard";
