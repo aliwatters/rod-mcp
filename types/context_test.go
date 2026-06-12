@@ -302,6 +302,32 @@ func TestExecuteRecoversHandlerPanic(t *testing.T) {
 	}
 }
 
+func TestExecuteHandlerErrorPreservesBrowserState(t *testing.T) {
+	ctx := newTestContext()
+	page := &rod.Page{}
+	browser := &rod.Browser{}
+	ctx.page = page
+	ctx.browser = browser
+
+	handler := ctx.Execute(func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		return nil, errors.New("transient cdp EOF")
+	}, ToolHandlerCallOpts{})
+
+	result, err := handler(context.Background(), mcp.CallToolRequest{})
+	if err != nil {
+		t.Fatalf("Execute returned unexpected error: %v", err)
+	}
+	if result == nil || !result.IsError {
+		t.Fatal("Execute should convert handler errors to MCP error results")
+	}
+	if ctx.page != page {
+		t.Fatal("Execute handler error cleared the active page")
+	}
+	if ctx.browser != browser {
+		t.Fatal("Execute handler error cleared the active browser")
+	}
+}
+
 func TestStartKeepalive_NilBrowser(t *testing.T) {
 	ctx := newTestContext()
 	// Should not panic with nil browser.

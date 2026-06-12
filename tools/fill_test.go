@@ -1,6 +1,11 @@
 package tools
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/aliwatters/rod-mcp/types/js"
+)
 
 func TestFillFormToolDefinition(t *testing.T) {
 	if FillForm.Name != FillFormToolKey {
@@ -81,5 +86,21 @@ func TestSmartFillResultType(t *testing.T) {
 	}
 	if r.Success != true {
 		t.Error("Success should be true")
+	}
+}
+
+func TestSmartFillSupportsContentEditableInputEvents(t *testing.T) {
+	required := []string{
+		"isContentEditable",
+		"beforeinput",
+		"InputEvent",
+		"insertText",
+		"contenteditable_input",
+	}
+
+	for _, s := range required {
+		if !strings.Contains(js.SmartFillJS, s) {
+			t.Fatalf("SmartFillJS missing %q contenteditable support", s)
+		}
 	}
 }

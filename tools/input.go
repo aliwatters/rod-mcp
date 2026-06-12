@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net"
+	"strings"
 	"time"
 
 	"github.com/go-rod/rod"
@@ -19,6 +22,13 @@ const (
 	TypeToolKey       = "rod_type"
 	FileUploadToolKey = "rod_file_upload"
 )
+
+const (
+	typeTextChunkSize  = 32
+	typeTextMaxRetries = 1
+)
+
+type textInserter func(string) error
 
 var (
 	PressKey = mcp.NewTool(PressKeyToolKey,
@@ -119,19 +129,8 @@ var (
 			}
 			delay := time.Duration(delayMs * float64(time.Millisecond))
 
-			// Insert each rune with a delay between text input events.
-			for _, ch := range text {
-				if err := page.InsertText(string(ch)); err != nil {
-					return toolErr(fmt.Sprintf("type character %q", string(ch)), err)
-				}
-				if delay > 0 {
-					select {
-					case <-ctx.Done():
-						return nil, ctx.Err()
-					case <-time.After(delay):
-						// proceed to next character
-					}
-				}
+			if err := typeTextInChunks(ctx, text, delay, page.InsertText); err != nil {
+				return toolErr("type text", err)
 			}
 
 			waitDOMStable(page)
@@ -189,3 +188,82 @@ var (
 		return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: false})
 	}
 )
+
+func typeTextInChunks(ctx context.Context, text string, delay time.Duration, insert textInserter) error {
+	for _, chunk := range splitTextChunks(text, typeTextChunkSize) {
+		var err error
+		for attempt := 0; attempt <= typeTextMaxRetries; attempt++ {
+			err = insert(chunk)
+			if err == nil {
+				break
+			}
+			if attempt == typeTextMaxRetries || !isRetryableInputError(err) {
+				return fmt.Errorf("insert text chunk %q: %w", chunk, err)
+			}
+		}
+
+		if delay > 0 {
+			wait := delay * time.Duration(len([]rune(chunk)))
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(wait):
+			}
+		}
+	}
+	return nil
+}
+
+func splitTextChunks(text string, maxRunes int) []string {
+	if text == "" {
+		return nil
+	}
+	if maxRunes <= 0 {
+		return []string{text}
+	}
+
+	chunks := make([]string, 0, (len([]rune(text))+maxRunes-1)/maxRunes)
+	var builder strings.Builder
+	count := 0
+	for _, r := range text {
+		builder.WriteRune(r)
+		count++
+		if count == maxRunes {
+			chunks = append(chunks, builder.String())
+			builder.Reset()
+			count = 0
+		}
+	}
+	if builder.Len() > 0 {
+		chunks = append(chunks, builder.String())
+	}
+	return chunks
+}
+
+func isRetryableInputError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, io.ErrClosedPipe) ||
+		errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"eof",
+		"use of closed network connection",
+		"connection reset by peer",
+		"connection is closed",
+		"broken pipe",
+		"session closed",
+		"target closed",
+		"websocket: close",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
