@@ -478,6 +478,84 @@ func TestInitial_CDPEndpointFailuresDoNotUseManagedLaunchBackoff(t *testing.T) {
 	}
 }
 
+// TestInitial_LaunchUsesLongLivedContext is the regression test for the rod-mcp#308
+// context bug: the browser must be created under the LONG-LIVED context, never a
+// launch-timeout context that gets cancelled on return. rod ties a browser's CDP
+// connection/event loop to its creation context, so a cancel-on-return launch
+// timeout broke every later op with "context canceled". The launch timeout is
+// now applied to the launcher (Chrome startup) inside launchBrowser, NOT to the
+// launchBrowserFunc context.
+func TestInitial_LaunchUsesLongLivedContext(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx := NewContext(parent, Config{
+		Mode:            Text,
+		Headless:        true,
+		LaunchTimeoutMs: 10,
+	})
+
+	var gotCtx context.Context
+	withLaunchBrowserFunc(t, func(c context.Context, cfg Config) (*rod.Browser, string, error) {
+		gotCtx = c
+		// Return immediately (do NOT block on c.Done()) — the browser lifetime
+		// context must not carry the launch timeout, so c.Done() must never fire.
+		return nil, "", errors.New("stub: no real browser")
+	})
+
+	_ = ctx.initial() // errors from the stub; we only care about the context passed in
+	if gotCtx == nil {
+		t.Fatal("launchBrowserFunc was not called")
+	}
+	if dl, ok := gotCtx.Deadline(); ok {
+		t.Fatalf("launchBrowserFunc context has deadline %v; want the long-lived lifetime context (launch timeout belongs to the launcher, not the browser)", dl)
+	}
+	if gotCtx.Err() != nil {
+		t.Fatalf("launchBrowserFunc context already cancelled: %v", gotCtx.Err())
+	}
+}
+
+func TestRecoverBrowserAfterErrorDropsState(t *testing.T) {
+	ctx := newTestContext()
+	ctx.browser = &rod.Browser{}
+	ctx.page = &rod.Page{}
+	ctx.pageCancel = func() {}
+	ctx.keepaliveCancel = func() {}
+
+	if !ctx.RecoverBrowserAfterError(context.DeadlineExceeded) {
+		t.Fatal("RecoverBrowserAfterError returned false for deadline error")
+	}
+	if ctx.browser != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear browser")
+	}
+	if ctx.page != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear page")
+	}
+	if ctx.pageCancel != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear page cancel")
+	}
+	if ctx.keepaliveCancel != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear keepalive cancel")
+	}
+}
+
+func TestRecoverBrowserAfterErrorIgnoresNonRecoverableError(t *testing.T) {
+	ctx := newTestContext()
+	page := &rod.Page{}
+	browser := &rod.Browser{}
+	ctx.page = page
+	ctx.browser = browser
+
+	if ctx.RecoverBrowserAfterError(errors.New("validation failed")) {
+		t.Fatal("RecoverBrowserAfterError returned true for non-recoverable error")
+	}
+	if ctx.page != page {
+		t.Fatal("RecoverBrowserAfterError cleared page for non-recoverable error")
+	}
+	if ctx.browser != browser {
+		t.Fatal("RecoverBrowserAfterError cleared browser for non-recoverable error")
+	}
+}
+
 func withLaunchBrowserFunc(t *testing.T, fn func(context.Context, Config) (*rod.Browser, string, error)) {
 	t.Helper()
 	prev := launchBrowserFunc

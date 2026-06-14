@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-rod/rod"
@@ -65,8 +66,12 @@ func checkNavigationStatus(rodCtx *types.Context, url string) error {
 }
 
 // waitDOMStable waits for the DOM to stabilize, logging errors at debug level.
-func waitDOMStable(page *rod.Page) {
-	if err := page.WaitDOMStable(defaultWaitStableDur, defaultDomDiff); err != nil {
+func waitDOMStable(page *rod.Page, timeout ...time.Duration) {
+	waitTimeout := defaultNavigationTimeout
+	if len(timeout) > 0 && timeout[0] > 0 {
+		waitTimeout = timeout[0]
+	}
+	if err := page.Timeout(waitTimeout).WaitDOMStable(defaultWaitStableDur, defaultDomDiff); err != nil {
 		log.Debugf("WaitDOMStable: %s", err)
 	}
 }
