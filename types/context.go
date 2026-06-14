@@ -68,6 +68,9 @@ type Context struct {
 	nextLaunchAt time.Time
 	// lastLaunchErr is returned while managed local Chrome launch backoff is active.
 	lastLaunchErr error
+	// instanceLock prevents multiple rod-mcp processes from silently sharing
+	// explicit browser resources such as a CDP endpoint or debug port.
+	instanceLock *instanceLock
 
 	// snapshotLock serialises access to the cached ARIA snapshot.
 	// Lock ordering: always acquire snapshotLock before browserLock if both are
@@ -225,9 +228,15 @@ func (ctx *Context) launchBrowserLocked(reason string) error {
 		ctx.config.Headless,
 		ctx.config.CDPEndpoint != "",
 	)
-	browser, clonedDir, err := launchBrowserFunc(ctx.stdContext, ctx.config)
+	if err := ctx.acquireInstanceLockLocked(); err != nil {
+		return err
+	}
+	launchCtx, cancel := context.WithTimeout(ctx.stdContext, ctx.config.LaunchTimeout())
+	defer cancel()
+	browser, clonedDir, err := launchBrowserFunc(launchCtx, ctx.config)
 	if err != nil {
 		log.Warnf("browser launch failed: reason=%s error=%s", reason, err)
+		ctx.releaseInstanceLockLocked()
 		if ctx.isManagedLocalLaunchLocked() {
 			ctx.recordLaunchFailureLocked(reason, err)
 		}
@@ -236,6 +245,28 @@ func (ctx *Context) launchBrowserLocked(reason string) error {
 	ctx.browser = browser
 	ctx.clonedProfileDir = clonedDir
 	return nil
+}
+
+func (ctx *Context) acquireInstanceLockLocked() error {
+	if ctx.instanceLock != nil {
+		return nil
+	}
+	lock, err := acquireInstanceLock(ctx.config)
+	if err != nil {
+		return err
+	}
+	ctx.instanceLock = lock
+	return nil
+}
+
+func (ctx *Context) releaseInstanceLockLocked() {
+	if ctx.instanceLock == nil {
+		return
+	}
+	if err := ctx.instanceLock.Release(); err != nil {
+		log.Warnf("release browser instance lock: %s", err)
+	}
+	ctx.instanceLock = nil
 }
 
 func (ctx *Context) checkLaunchBackoffLocked(reason string) error {
@@ -327,6 +358,41 @@ func isClosedBrowserSessionError(err error) bool {
 		}
 	}
 	return false
+}
+
+func isRecoverableBrowserSessionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isClosedBrowserSessionError(err) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"context deadline exceeded",
+		"i/o timeout",
+		"timed out",
+		"timeout",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func (ctx *Context) RecoverBrowserAfterError(err error) bool {
+	if !isRecoverableBrowserSessionError(err) {
+		return false
+	}
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
+	if ctx.browser == nil && ctx.page == nil {
+		return false
+	}
+	log.Warnf("browser session appears wedged; dropping state so the next action relaunches: %s", err)
+	ctx.dropBrowserStateLocked()
+	return true
 }
 
 func (ctx *Context) dropBrowserStateLocked() {
@@ -503,6 +569,7 @@ func (ctx *Context) closeBrowser() error {
 	}
 
 	if ctx.browser == nil {
+		ctx.releaseInstanceLockLocked()
 		return nil
 	}
 
@@ -510,11 +577,13 @@ func (ctx *Context) closeBrowser() error {
 	if err != nil {
 		if isClosedBrowserSessionError(err) {
 			ctx.browser = nil
+			ctx.releaseInstanceLockLocked()
 			return nil
 		}
 		return fmt.Errorf("close browser: %w", err)
 	}
 	ctx.browser = nil
+	ctx.releaseInstanceLockLocked()
 	return nil
 }
 
@@ -562,17 +631,21 @@ func (ctx *Context) startKeepalive() {
 
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	targetURL := strings.Join(urls, "/")
-	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
+	pageCtx, cancel := context.WithTimeout(ctx.stdContext, ctx.config.LaunchTimeout())
+	defer cancel()
+	browser := ctx.browser.Context(pageCtx)
+	page, err := browser.Page(proto.TargetCreateTarget{URL: targetURL})
 	if err != nil {
 		return nil, fmt.Errorf("create page: %w", err)
 	}
-	if _, err := page.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
+	setupPage := page.Context(pageCtx)
+	if _, err := setupPage.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
 		return nil, fmt.Errorf("inject snapshot script: %w", err)
 	}
 
 	// Inject stealth patches before any page JS runs.
 	if ctx.config.Stealth {
-		if _, err := page.EvalOnNewDocument(js.StealthJS); err != nil {
+		if _, err := setupPage.EvalOnNewDocument(js.StealthJS); err != nil {
 			return nil, fmt.Errorf("inject stealth script: %w", err)
 		}
 		log.Debugf("stealth mode: injected anti-detection script on new page")
@@ -587,13 +660,14 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	}
 
 	if len(allHeaders) > 0 {
-		if _, err := page.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
+		if _, err := setupPage.SetExtraHeaders(utils.HeaderMapToSlice(allHeaders)); err != nil {
 			return nil, fmt.Errorf("set extra HTTP headers: %w", err)
 		}
 	}
 
-	cancel := ctx.attachEventListeners(page)
-	ctx.pageCancel = cancel
+	page = page.Context(ctx.stdContext)
+	pageCancel := ctx.attachEventListeners(page)
+	ctx.pageCancel = pageCancel
 
 	return page, nil
 }

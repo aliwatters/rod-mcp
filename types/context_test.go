@@ -478,6 +478,68 @@ func TestInitial_CDPEndpointFailuresDoNotUseManagedLaunchBackoff(t *testing.T) {
 	}
 }
 
+func TestInitial_LaunchUsesConfiguredTimeout(t *testing.T) {
+	ctx := NewContext(context.Background(), Config{
+		Mode:            Text,
+		Headless:        true,
+		LaunchTimeoutMs: 10,
+	})
+	withLaunchBrowserFunc(t, func(ctx context.Context, cfg Config) (*rod.Browser, string, error) {
+		<-ctx.Done()
+		return nil, "", ctx.Err()
+	})
+
+	err := ctx.initial()
+	if err == nil {
+		t.Fatal("initial: expected launch timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("initial error = %v, want context deadline exceeded", err)
+	}
+}
+
+func TestRecoverBrowserAfterErrorDropsState(t *testing.T) {
+	ctx := newTestContext()
+	ctx.browser = &rod.Browser{}
+	ctx.page = &rod.Page{}
+	ctx.pageCancel = func() {}
+	ctx.keepaliveCancel = func() {}
+
+	if !ctx.RecoverBrowserAfterError(context.DeadlineExceeded) {
+		t.Fatal("RecoverBrowserAfterError returned false for deadline error")
+	}
+	if ctx.browser != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear browser")
+	}
+	if ctx.page != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear page")
+	}
+	if ctx.pageCancel != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear page cancel")
+	}
+	if ctx.keepaliveCancel != nil {
+		t.Fatal("RecoverBrowserAfterError did not clear keepalive cancel")
+	}
+}
+
+func TestRecoverBrowserAfterErrorIgnoresNonRecoverableError(t *testing.T) {
+	ctx := newTestContext()
+	page := &rod.Page{}
+	browser := &rod.Browser{}
+	ctx.page = page
+	ctx.browser = browser
+
+	if ctx.RecoverBrowserAfterError(errors.New("validation failed")) {
+		t.Fatal("RecoverBrowserAfterError returned true for non-recoverable error")
+	}
+	if ctx.page != page {
+		t.Fatal("RecoverBrowserAfterError cleared page for non-recoverable error")
+	}
+	if ctx.browser != browser {
+		t.Fatal("RecoverBrowserAfterError cleared browser for non-recoverable error")
+	}
+}
+
 func withLaunchBrowserFunc(t *testing.T, fn func(context.Context, Config) (*rod.Browser, string, error)) {
 	t.Helper()
 	prev := launchBrowserFunc

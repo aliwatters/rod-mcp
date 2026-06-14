@@ -1,6 +1,10 @@
 package tools
 
-import "time"
+import (
+	"time"
+
+	"github.com/aliwatters/rod-mcp/types"
+)
 
 // Response and content size limits.
 const (
@@ -22,9 +26,6 @@ const (
 	// defaultDialogTimeout is the max time to wait for a browser dialog to appear.
 	defaultDialogTimeout = 30 * time.Second
 
-	// defaultNavigationTimeout is the max time to wait for a page navigation to complete.
-	defaultNavigationTimeout = 30 * time.Second
-
 	// defaultWaitTimeoutMs is the default timeout for wait operations in milliseconds.
 	defaultWaitTimeoutMs = 30000.0
 
@@ -38,6 +39,11 @@ const (
 	// Without a timeout, page.Element() polls indefinitely and the tool hangs forever.
 	defaultSelectorTimeout = 10 * time.Second
 )
+
+// defaultNavigationTimeout is the max time to wait for a page navigation to
+// complete. It tracks the single source of truth in the types config, which is
+// a package var (not a const), so this declaration must be a var too.
+var defaultNavigationTimeout = types.DefaultNavigationTimeout
 
 // Default parameter values for tool options.
 const (

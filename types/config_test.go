@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadConfigMergesDefaults(t *testing.T) {
@@ -31,6 +32,38 @@ func TestLoadConfigMergesDefaults(t *testing.T) {
 	}
 	if !cfg.Headless {
 		t.Error("Headless = false, want true from DefaultConfig")
+	}
+	if cfg.LaunchTimeout() != DefaultLaunchTimeout {
+		t.Errorf("LaunchTimeout = %s, want %s", cfg.LaunchTimeout(), DefaultLaunchTimeout)
+	}
+	if cfg.NavigationTimeout() != DefaultNavigationTimeout {
+		t.Errorf("NavigationTimeout = %s, want %s", cfg.NavigationTimeout(), DefaultNavigationTimeout)
+	}
+}
+
+func TestConfigTimeoutOverrides(t *testing.T) {
+	cfg := Config{
+		LaunchTimeoutMs:     1500,
+		NavigationTimeoutMs: 2500,
+	}
+	if cfg.LaunchTimeout() != 1500*time.Millisecond {
+		t.Errorf("LaunchTimeout = %s, want 1.5s", cfg.LaunchTimeout())
+	}
+	if cfg.NavigationTimeout() != 2500*time.Millisecond {
+		t.Errorf("NavigationTimeout = %s, want 2.5s", cfg.NavigationTimeout())
+	}
+}
+
+func TestConfigTimeoutFallbacks(t *testing.T) {
+	cfg := Config{
+		LaunchTimeoutMs:     -1,
+		NavigationTimeoutMs: 0,
+	}
+	if cfg.LaunchTimeout() != DefaultLaunchTimeout {
+		t.Errorf("LaunchTimeout fallback = %s, want %s", cfg.LaunchTimeout(), DefaultLaunchTimeout)
+	}
+	if cfg.NavigationTimeout() != DefaultNavigationTimeout {
+		t.Errorf("NavigationTimeout fallback = %s, want %s", cfg.NavigationTimeout(), DefaultNavigationTimeout)
 	}
 }
 

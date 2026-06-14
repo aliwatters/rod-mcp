@@ -50,11 +50,13 @@ func simplePageAction(rodCtx *types.Context, name string, action func(*rod.Page)
 		if err != nil {
 			return toolErr(name, err)
 		}
-		timedPage := page.Timeout(defaultNavigationTimeout)
+		navTimeout := rodCtx.Config().NavigationTimeout()
+		timedPage := page.Timeout(navTimeout)
 		if err = action(timedPage); err != nil {
+			rodCtx.RecoverBrowserAfterError(err)
 			return toolErr(name, err)
 		}
-		waitDOMStable(page)
+		waitDOMStable(page, navTimeout)
 		return mcp.NewToolResultText(fmt.Sprintf("%s successfully", name)), nil
 	}
 	return rodCtx.Execute(handler, types.ToolHandlerCallOpts{WithSnapshot: rodCtx.CurrentMode() == types.Text})
@@ -87,11 +89,13 @@ var (
 
 			// Apply a timeout so navigation cannot hang indefinitely (e.g. if a
 			// beforeunload dialog blocks, or the server never responds).
-			timedPage := page.Timeout(defaultNavigationTimeout)
+			navTimeout := rodCtx.Config().NavigationTimeout()
+			timedPage := page.Timeout(navTimeout)
 			if err = timedPage.Navigate(url); err != nil {
+				rodCtx.RecoverBrowserAfterError(err)
 				return toolErr("navigate to "+url, err)
 			}
-			waitDOMStable(page)
+			waitDOMStable(page, navTimeout)
 
 			// Fail fast if the page returned an HTTP error (e.g. 404, 500).
 			// Use the final page URL to handle redirects (e.g. http→https).

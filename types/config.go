@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aliwatters/rod-mcp/utils"
 	"github.com/charmbracelet/log"
@@ -60,23 +61,25 @@ const (
 )
 
 type Config struct {
-	Mode             Mode              `yaml:"mode" json:"mode"`
-	CDPEndpoint      string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
-	ChromeDebugPort  string            `yaml:"chromeDebugPort" json:"chromeDebugPort"`
-	UserDataDir      string            `yaml:"userDataDir" json:"userDataDir"`
-	CloneDomains     []string          `yaml:"cloneDomains" json:"cloneDomains"`
-	NoClone          bool              `yaml:"noClone" json:"noClone"`
-	CloneAll         bool              `yaml:"cloneAll" json:"cloneAll"`
-	ServerName       string            `yaml:"serverName" json:"serverName"`
-	ServerVersion    string            `yaml:"-" json:"-"`
-	BrowserBinPath   string            `yaml:"browserBinPath" json:"browserBinPath"`
-	Headless         bool              `yaml:"headless" json:"headless"`
-	BrowserTempDir   string            `yaml:"browserTempDir" json:"browserTempDir"`
-	NoSandbox        bool              `yaml:"noSandbox" json:"noSandbox"`
-	Proxy            string            `yaml:"proxy" json:"proxy"`
-	LoggerConfig     LoggerConfig      `yaml:"loggerConfig" json:"loggerConfig"`
-	ExtraHTTPHeaders map[string]string `yaml:"extraHTTPHeaders" json:"extraHTTPHeaders"`
-	CompactSnapshot  bool              `yaml:"compactSnapshot" json:"compactSnapshot"`
+	Mode                Mode              `yaml:"mode" json:"mode"`
+	CDPEndpoint         string            `yaml:"cdpEndpoint" json:"cdpEndpoint"`
+	ChromeDebugPort     string            `yaml:"chromeDebugPort" json:"chromeDebugPort"`
+	LaunchTimeoutMs     int               `yaml:"launchTimeoutMs" json:"launchTimeoutMs"`
+	NavigationTimeoutMs int               `yaml:"navigationTimeoutMs" json:"navigationTimeoutMs"`
+	UserDataDir         string            `yaml:"userDataDir" json:"userDataDir"`
+	CloneDomains        []string          `yaml:"cloneDomains" json:"cloneDomains"`
+	NoClone             bool              `yaml:"noClone" json:"noClone"`
+	CloneAll            bool              `yaml:"cloneAll" json:"cloneAll"`
+	ServerName          string            `yaml:"serverName" json:"serverName"`
+	ServerVersion       string            `yaml:"-" json:"-"`
+	BrowserBinPath      string            `yaml:"browserBinPath" json:"browserBinPath"`
+	Headless            bool              `yaml:"headless" json:"headless"`
+	BrowserTempDir      string            `yaml:"browserTempDir" json:"browserTempDir"`
+	NoSandbox           bool              `yaml:"noSandbox" json:"noSandbox"`
+	Proxy               string            `yaml:"proxy" json:"proxy"`
+	LoggerConfig        LoggerConfig      `yaml:"loggerConfig" json:"loggerConfig"`
+	ExtraHTTPHeaders    map[string]string `yaml:"extraHTTPHeaders" json:"extraHTTPHeaders"`
+	CompactSnapshot     bool              `yaml:"compactSnapshot" json:"compactSnapshot"`
 	// DomainHeaders maps domain patterns to headers that should be injected for matching URLs.
 	// Patterns support wildcards: "*.example.com" matches "www.example.com", "api.example.com", etc.
 	// Headers from matching patterns are merged with ExtraHTTPHeaders.
@@ -103,21 +106,40 @@ type Config struct {
 }
 
 var (
-	DefaultBrowserTempDir = "./rod/browser"
-	DefaultServerName     = "Rod Server"
+	DefaultBrowserTempDir    = "./rod/browser"
+	DefaultServerName        = "Rod Server"
+	DefaultLaunchTimeout     = 30 * time.Second
+	DefaultNavigationTimeout = 30 * time.Second
 
 	DefaultConfig = Config{
-		BrowserBinPath: "",
-		Headless:       true,
-		BrowserTempDir: DefaultBrowserTempDir,
-		NoSandbox:      false,
-		Proxy:          "",
-		ServerName:     DefaultServerName,
-		LoggerConfig:   DefaultLoggerConfig,
-		Mode:           Text,
-		ImageResponses: ImageResponsesAllow,
+		BrowserBinPath:      "",
+		Headless:            true,
+		BrowserTempDir:      DefaultBrowserTempDir,
+		LaunchTimeoutMs:     int(DefaultLaunchTimeout / time.Millisecond),
+		NavigationTimeoutMs: int(DefaultNavigationTimeout / time.Millisecond),
+		NoSandbox:           false,
+		Proxy:               "",
+		ServerName:          DefaultServerName,
+		LoggerConfig:        DefaultLoggerConfig,
+		Mode:                Text,
+		ImageResponses:      ImageResponsesAllow,
 	}
 )
+
+func (c Config) LaunchTimeout() time.Duration {
+	return timeoutFromMilliseconds(c.LaunchTimeoutMs, DefaultLaunchTimeout)
+}
+
+func (c Config) NavigationTimeout() time.Duration {
+	return timeoutFromMilliseconds(c.NavigationTimeoutMs, DefaultNavigationTimeout)
+}
+
+func timeoutFromMilliseconds(ms int, fallback time.Duration) time.Duration {
+	if ms <= 0 {
+		return fallback
+	}
+	return time.Duration(ms) * time.Millisecond
+}
 
 // InitDefaultConfig generates the default configuration file at DefaultConfigPath.
 // It creates any missing parent directories. If the file already exists, it is a no-op.
