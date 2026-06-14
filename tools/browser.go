@@ -31,7 +31,7 @@ var (
 		mcp.WithDescription("Close the browser"),
 	)
 	SetHeaders = mcp.NewTool(SetHeadersToolKey,
-		mcp.WithDescription("Set extra HTTP headers for all requests. Useful for authentication, bypassing Cloudflare/Vercel protection, or custom headers."),
+		mcp.WithDescription("Set extra HTTP headers on the active browser page after rod_navigate. For known domains, prefer domainHeaders in rod-mcp.yaml so headers are applied automatically on matching navigations."),
 		mcp.WithObject("headers", mcp.Description("Headers as key-value pairs, e.g. {\"Authorization\": \"Bearer token\", \"X-Custom-Header\": \"value\"}"), mcp.Required()),
 	)
 	Resize = mcp.NewTool(ResizeToolKey,
@@ -130,7 +130,7 @@ var (
 
 	SetHeadersHandler = func(rodCtx *types.Context) server.ToolHandlerFunc {
 		handler := func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-			page, err := rodCtx.EnsurePage()
+			page, err := rodCtx.ActivePage()
 			if err != nil {
 				return toolErr("set headers", err)
 			}

@@ -120,6 +120,26 @@ func TestLatestSnapshot_NilWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestActivePageRequiresExistingPage(t *testing.T) {
+	ctx := newTestContext()
+
+	page, err := ctx.ActivePage()
+	if err == nil {
+		t.Fatal("ActivePage: expected error when no page exists")
+	}
+	if page != nil {
+		t.Fatalf("ActivePage returned page = %v, want nil", page)
+	}
+	for _, want := range []string{"no active page", "rod_navigate", "domainHeaders"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("ActivePage error = %q, want substring %q", err.Error(), want)
+		}
+	}
+	if ctx.browser != nil || ctx.page != nil {
+		t.Fatal("ActivePage should not initialize browser or page")
+	}
+}
+
 func TestLatestSnapshot_ReturnsExisting(t *testing.T) {
 	ctx := newTestContext()
 

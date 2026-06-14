@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/go-rod/rod/lib/input"
@@ -63,6 +64,17 @@ func TestPdfToolRegistered(t *testing.T) {
 	// Verify PdfHandler is in CommonToolHandlers
 	if _, ok := CommonToolHandlers[PdfToolKey]; !ok {
 		t.Error("PdfHandler not found in CommonToolHandlers")
+	}
+}
+
+func TestSetHeadersToolDefinition(t *testing.T) {
+	if SetHeaders.Name != SetHeadersToolKey {
+		t.Errorf("SetHeaders tool name = %q, want %q", SetHeaders.Name, SetHeadersToolKey)
+	}
+	for _, want := range []string{"active browser page", "rod_navigate", "domainHeaders"} {
+		if !strings.Contains(SetHeaders.Description, want) {
+			t.Errorf("SetHeaders description = %q, want substring %q", SetHeaders.Description, want)
+		}
 	}
 }
 

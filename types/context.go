@@ -124,6 +124,15 @@ func (ctx *Context) ControlledPage() (*rod.Page, error) {
 	return ctx.page, nil
 }
 
+func (ctx *Context) ActivePage() (*rod.Page, error) {
+	ctx.browserLock.Lock()
+	defer ctx.browserLock.Unlock()
+	if ctx.page == nil {
+		return nil, errors.New("no active page, call rod_navigate first, or configure domainHeaders in rod-mcp.yaml")
+	}
+	return ctx.page, nil
+}
+
 // ControlledBrowser returns the browser instance, or an error if no browser is running.
 func (ctx *Context) ControlledBrowser() (*rod.Browser, error) {
 	if err := ctx.initial(); err != nil {
