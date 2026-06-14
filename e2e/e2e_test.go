@@ -6,6 +6,8 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"strings"
@@ -769,6 +771,31 @@ func TestE2E_Evaluate(t *testing.T) {
 		}, timeoutMedium)
 		assertContains(t, result, "[1,2,3]")
 	})
+}
+
+func TestE2E_SetHeadersBeforeNavigate(t *testing.T) {
+	skipIfShort(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("<html><body>ok</body></html>"))
+	}))
+	defer srv.Close()
+
+	h := newHarness(t)
+	h.initialize()
+
+	result := h.callWithTimeout("rod_set_headers", map[string]any{
+		"headers": map[string]string{
+			"X-Test-Header": "first-call",
+		},
+	}, timeoutMedium)
+	assertContains(t, result, "no active page")
+	assertContains(t, result, "domainHeaders")
+	if strings.Contains(result, "panic") {
+		t.Fatalf("rod_set_headers before navigation returned panic text: %s", truncate(result, 300))
+	}
+
+	result = h.navigate(srv.URL)
+	assertContains(t, result, "Navigated to "+srv.URL)
 }
 
 // TestE2E_Network tests network_requests, response_body, set_headers, intercept, and websocket.
