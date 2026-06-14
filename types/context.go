@@ -242,6 +242,11 @@ func (ctx *Context) launchBrowserLocked(reason string) error {
 		}
 		return fmt.Errorf("launch browser: %w", err)
 	}
+	// launchCtx bounds only the launch/connect OPERATION (so a hung launch fails
+	// fast). Re-bind the browser's LIFETIME context to the long-lived stdContext
+	// so `defer cancel()` does not immediately close the just-launched browser
+	// (which would make every later op fail with "context canceled").
+	browser = browser.Context(ctx.stdContext)
 	ctx.browser = browser
 	ctx.clonedProfileDir = clonedDir
 	return nil
