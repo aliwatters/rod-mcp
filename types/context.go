@@ -231,9 +231,12 @@ func (ctx *Context) launchBrowserLocked(reason string) error {
 	if err := ctx.acquireInstanceLockLocked(); err != nil {
 		return err
 	}
-	launchCtx, cancel := context.WithTimeout(ctx.stdContext, ctx.config.LaunchTimeout())
-	defer cancel()
-	browser, clonedDir, err := launchBrowserFunc(launchCtx, ctx.config)
+	// The browser's LIFETIME context is stdContext (long-lived). The launch
+	// TIMEOUT is applied inside launchBrowser to the launcher (Chrome startup)
+	// only — NOT to the rod browser — because rod ties the browser's CDP
+	// connection/event loop to its creation context; creating it under a
+	// cancel-on-return timeout would break every later op (rod-mcp#308).
+	browser, clonedDir, err := launchBrowserFunc(ctx.stdContext, ctx.config)
 	if err != nil {
 		log.Warnf("browser launch failed: reason=%s error=%s", reason, err)
 		ctx.releaseInstanceLockLocked()
@@ -242,11 +245,6 @@ func (ctx *Context) launchBrowserLocked(reason string) error {
 		}
 		return fmt.Errorf("launch browser: %w", err)
 	}
-	// launchCtx bounds only the launch/connect OPERATION (so a hung launch fails
-	// fast). Re-bind the browser's LIFETIME context to the long-lived stdContext
-	// so `defer cancel()` does not immediately close the just-launched browser
-	// (which would make every later op fail with "context canceled").
-	browser = browser.Context(ctx.stdContext)
 	ctx.browser = browser
 	ctx.clonedProfileDir = clonedDir
 	return nil
@@ -636,14 +634,16 @@ func (ctx *Context) startKeepalive() {
 
 func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 	targetURL := strings.Join(urls, "/")
-	pageCtx, cancel := context.WithTimeout(ctx.stdContext, ctx.config.LaunchTimeout())
-	defer cancel()
-	browser := ctx.browser.Context(pageCtx)
-	page, err := browser.Page(proto.TargetCreateTarget{URL: targetURL})
+	page, err := ctx.browser.Page(proto.TargetCreateTarget{URL: targetURL})
 	if err != nil {
 		return nil, fmt.Errorf("create page: %w", err)
 	}
-	setupPage := page.Context(pageCtx)
+	// Setup runs on the page's long-lived (browser) context. A page must NOT be
+	// created under a cancel-on-return timeout context: rod ties the page's CDP
+	// session/event loop to its creation context, so cancelling it breaks every
+	// later op with "context canceled" (rod-mcp#308). rod_navigate's per-op
+	// page.Timeout() bounds navigation hangs safely without this side effect.
+	setupPage := page
 	if _, err := setupPage.EvalOnNewDocument(js.InjectedSnapShot); err != nil {
 		return nil, fmt.Errorf("inject snapshot script: %w", err)
 	}
@@ -670,7 +670,6 @@ func (ctx *Context) createPage(urls ...string) (*rod.Page, error) {
 		}
 	}
 
-	page = page.Context(ctx.stdContext)
 	pageCancel := ctx.attachEventListeners(page)
 	ctx.pageCancel = pageCancel
 

@@ -40,7 +40,14 @@ func launchBrowser(ctx context.Context, cfg Config) (browser *rod.Browser, clone
 		return nil, "", err
 	}
 
-	browserLauncher, err := configureLauncher(ctx, cfg, userDataDir)
+	// Bound Chrome STARTUP (the launcher) with the launch timeout so a hung
+	// local-Chrome launch fails fast. This context is for the launcher only; the
+	// rod browser below keeps the long-lived ctx as its lifetime context (rod
+	// ties a browser's connection/event loop to its creation context, so it must
+	// not be created under a cancel-on-return timeout — rod-mcp#308).
+	launchCtx, cancelLaunch := context.WithTimeout(ctx, cfg.LaunchTimeout())
+	defer cancelLaunch()
+	browserLauncher, err := configureLauncher(launchCtx, cfg, userDataDir)
 	if err != nil {
 		return nil, "", err
 	}

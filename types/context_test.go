@@ -478,23 +478,39 @@ func TestInitial_CDPEndpointFailuresDoNotUseManagedLaunchBackoff(t *testing.T) {
 	}
 }
 
-func TestInitial_LaunchUsesConfiguredTimeout(t *testing.T) {
-	ctx := NewContext(context.Background(), Config{
+// TestInitial_LaunchUsesLongLivedContext is the regression test for the rod-mcp#308
+// context bug: the browser must be created under the LONG-LIVED context, never a
+// launch-timeout context that gets cancelled on return. rod ties a browser's CDP
+// connection/event loop to its creation context, so a cancel-on-return launch
+// timeout broke every later op with "context canceled". The launch timeout is
+// now applied to the launcher (Chrome startup) inside launchBrowser, NOT to the
+// launchBrowserFunc context.
+func TestInitial_LaunchUsesLongLivedContext(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx := NewContext(parent, Config{
 		Mode:            Text,
 		Headless:        true,
 		LaunchTimeoutMs: 10,
 	})
-	withLaunchBrowserFunc(t, func(ctx context.Context, cfg Config) (*rod.Browser, string, error) {
-		<-ctx.Done()
-		return nil, "", ctx.Err()
+
+	var gotCtx context.Context
+	withLaunchBrowserFunc(t, func(c context.Context, cfg Config) (*rod.Browser, string, error) {
+		gotCtx = c
+		// Return immediately (do NOT block on c.Done()) — the browser lifetime
+		// context must not carry the launch timeout, so c.Done() must never fire.
+		return nil, "", errors.New("stub: no real browser")
 	})
 
-	err := ctx.initial()
-	if err == nil {
-		t.Fatal("initial: expected launch timeout")
+	_ = ctx.initial() // errors from the stub; we only care about the context passed in
+	if gotCtx == nil {
+		t.Fatal("launchBrowserFunc was not called")
 	}
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("initial error = %v, want context deadline exceeded", err)
+	if dl, ok := gotCtx.Deadline(); ok {
+		t.Fatalf("launchBrowserFunc context has deadline %v; want the long-lived lifetime context (launch timeout belongs to the launcher, not the browser)", dl)
+	}
+	if gotCtx.Err() != nil {
+		t.Fatalf("launchBrowserFunc context already cancelled: %v", gotCtx.Err())
 	}
 }
 
