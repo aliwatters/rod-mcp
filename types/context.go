@@ -95,6 +95,7 @@ type Context struct {
 }
 
 var browserLaunchNow = time.Now
+var createPageFunc = (*Context).createPage
 
 func NewContext(ctx context.Context, cfg Config) *Context {
 	return &Context{
@@ -112,6 +113,9 @@ func (ctx *Context) EnsurePage() (*rod.Page, error) {
 	}
 	ctx.browserLock.Lock()
 	defer ctx.browserLock.Unlock()
+	if ctx.page == nil {
+		return nil, errors.New("failed to create page after browser launch — retry rod_navigate")
+	}
 	return ctx.page, nil
 }
 
@@ -184,7 +188,7 @@ func (ctx *Context) initLocked() (bool, error) {
 			return recovered, err
 		}
 		ctx.startKeepalive()
-		ctx.page, err = ctx.createPage()
+		ctx.page, err = createPageFunc(ctx)
 		if err != nil {
 			pageErr := fmt.Errorf("create initial page: %w", err)
 			log.Warnf("browser launch failed after connect: reason=%s error=%s", launchReason, pageErr)
@@ -201,7 +205,7 @@ func (ctx *Context) initLocked() (bool, error) {
 		return recovered, nil
 	}
 	if ctx.page == nil {
-		ctx.page, err = ctx.createPage()
+		ctx.page, err = createPageFunc(ctx)
 		if err != nil {
 			return recovered, fmt.Errorf("create page: %w", err)
 		}

@@ -140,6 +140,40 @@ func TestActivePageRequiresExistingPage(t *testing.T) {
 	}
 }
 
+func TestEnsurePageErrorsWhenInitialLeavesPageNil(t *testing.T) {
+	parent, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx := NewContext(parent, Config{Mode: Text, Headless: true})
+	defer func() {
+		ctx.browserLock.Lock()
+		if ctx.keepaliveCancel != nil {
+			ctx.keepaliveCancel()
+			ctx.keepaliveCancel = nil
+		}
+		ctx.releaseInstanceLockLocked()
+		ctx.browser = nil
+		ctx.browserLock.Unlock()
+	}()
+
+	withLaunchBrowserFunc(t, func(context.Context, Config) (*rod.Browser, string, error) {
+		return rod.New(), "", nil
+	})
+	withCreatePageFunc(t, func(*Context, ...string) (*rod.Page, error) {
+		return nil, nil
+	})
+
+	page, err := ctx.EnsurePage()
+	if err == nil {
+		t.Fatal("EnsurePage: expected error when initial succeeds without creating a page")
+	}
+	if page != nil {
+		t.Fatalf("EnsurePage returned page = %v, want nil", page)
+	}
+	if !strings.Contains(err.Error(), "failed to create page after browser launch") {
+		t.Fatalf("EnsurePage error = %q, want page creation failure message", err.Error())
+	}
+}
+
 func TestLatestSnapshot_ReturnsExisting(t *testing.T) {
 	ctx := newTestContext()
 
@@ -562,6 +596,15 @@ func withLaunchBrowserFunc(t *testing.T, fn func(context.Context, Config) (*rod.
 	launchBrowserFunc = fn
 	t.Cleanup(func() {
 		launchBrowserFunc = prev
+	})
+}
+
+func withCreatePageFunc(t *testing.T, fn func(*Context, ...string) (*rod.Page, error)) {
+	t.Helper()
+	prev := createPageFunc
+	createPageFunc = fn
+	t.Cleanup(func() {
+		createPageFunc = prev
 	})
 }
 
