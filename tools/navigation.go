@@ -3,6 +3,7 @@ package tools
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/log"
@@ -80,6 +81,9 @@ var (
 			page, err := rodCtx.EnsurePage()
 			if err != nil {
 				return toolErr("navigate to "+url, err)
+			}
+			if page == nil {
+				return toolErr("navigate to "+url, errors.New("no active page after EnsurePage"))
 			}
 
 			// Update headers for the target URL (applies domain-specific headers from config)
