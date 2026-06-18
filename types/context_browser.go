@@ -172,13 +172,13 @@ func configureLauncher(ctx context.Context, cfg Config, userDataDir string) (*la
 
 func controlBrowser(ctx context.Context, controlURL string) (*rod.Browser, error) {
 	browser := rod.New().Context(ctx)
-	err := browser.ControlURL(controlURL).Connect()
-	if err != nil {
-		closeErr := browser.Close()
-		if closeErr != nil {
-			return nil, fmt.Errorf("close browser after connect failure: %w", closeErr)
-		}
-		return nil, fmt.Errorf("connect to browser: %w", err)
+	if err := browser.ControlURL(controlURL).Connect(); err != nil {
+		// Do NOT call browser.Close() here: when Connect() fails (e.g. no
+		// Chrome listening at the configured CDP endpoint), the browser's CDP
+		// client was never established, and go-rod's Close() dereferences that
+		// nil client — turning a clean "can't connect" error into a panic.
+		// There is nothing to close on a browser that never connected.
+		return nil, fmt.Errorf("connect to browser at %s: %w", controlURL, err)
 	}
 	if err := browser.IgnoreCertErrors(true); err != nil {
 		return nil, fmt.Errorf("set ignore certificate errors: %w", err)
