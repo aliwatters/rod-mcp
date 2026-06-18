@@ -4,6 +4,9 @@ gomod:
   env:
     - GOPROXY=https://goproxy.cn,direct
     - GO111MODULE=on
+    # Skip the checksum-database lookup: goproxy.cn returns 404 for the sumdb
+    # lookup of a just-pushed tag, causing long retry churn during release.
+    - GOSUMDB=off
 
 before:
   hooks:
