@@ -64,3 +64,6 @@ dist/
 # Node (used for JS minification only)
 node_modules/
 package-lock.json
+
+# Runtime Chrome user-data-dirs created by rod during tests/e2e — never commit (#313)
+types/rod/
