@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 type instanceLock struct {
@@ -97,11 +96,6 @@ func staleInstanceLock(path string) (bool, int, error) {
 		return false, pid, nil
 	}
 	return true, pid, nil
-}
-
-func processExists(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
 }
 
 func (l *instanceLock) Release() error {
