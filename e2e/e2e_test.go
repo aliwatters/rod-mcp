@@ -18,9 +18,10 @@ import (
 
 // Timeout constants for use across all test groups.
 const (
-	timeoutShort  = 5 * time.Second
-	timeoutMedium = 10 * time.Second
-	timeoutLong   = 30 * time.Second
+	timeoutShort        = 5 * time.Second
+	timeoutMedium       = 10 * time.Second
+	timeoutLong         = 30 * time.Second
+	timeoutColdNavigate = 90 * time.Second
 )
 
 // jsonRPCRequest is a JSON-RPC 2.0 request.
@@ -51,13 +52,14 @@ type mcpResult struct {
 
 // harness manages the rod-mcp subprocess and JSON-RPC communication.
 type harness struct {
-	t       *testing.T
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	scanner *bufio.Scanner
-	lines   <-chan scanLine
-	mu      sync.Mutex
-	nextID  int
+	t         *testing.T
+	cmd       *exec.Cmd
+	stdin     io.WriteCloser
+	scanner   *bufio.Scanner
+	lines     <-chan scanLine
+	mu        sync.Mutex
+	nextID    int
+	navigated bool
 	// responses stores responses by ID for out-of-order reading.
 	responses map[int]jsonRPCResponse
 }
@@ -300,9 +302,19 @@ func truncate(s string, n int) string {
 // Uses a longer timeout to accommodate browser launch on first navigation.
 func (h *harness) navigate(url string) string {
 	h.t.Helper()
-	result := h.callWithTimeout("rod_navigate", map[string]any{"url": url}, timeoutLong)
+	result := h.callWithTimeout("rod_navigate", map[string]any{"url": url}, h.navigateTimeout())
 	h.callWithTimeout("rod_wait_for", map[string]any{"selector": "body", "timeout": 15000}, 20*time.Second)
 	return result
+}
+
+func (h *harness) navigateTimeout() time.Duration {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.navigated {
+		return timeoutLong
+	}
+	h.navigated = true
+	return timeoutColdNavigate
 }
 
 // initialize performs the MCP handshake.
@@ -406,7 +418,7 @@ func TestE2E_Navigation(t *testing.T) {
 
 		result = h.callWithTimeout("rod_navigate", map[string]any{
 			"url": "https://the-internet.herokuapp.com",
-		}, timeoutLong)
+		}, timeoutColdNavigate)
 		assertContains(t, result, "Navigated to")
 	})
 }
