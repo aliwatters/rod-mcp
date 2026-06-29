@@ -774,21 +774,44 @@ func (ctx *Context) UpdateHeadersForURL(url string) error {
 	return nil
 }
 
+// ReconfigureOptions describes runtime browser settings that may be changed
+// before the next browser launch. Nil fields are left unchanged.
+type ReconfigureOptions struct {
+	Headless     *bool
+	CDPEndpoint  *string
+	Stealth      *bool
+	UserDataDir  *string
+	CloneDomains *[]string
+	NoClone      *bool
+	CloneAll     *bool
+}
+
 // Reconfigure updates browser settings and closes any running browser so the
-// next tool call reinitializes with the new configuration.  Pass nil for any
-// field to leave it unchanged.
-func (ctx *Context) Reconfigure(headless *bool, cdpEndpoint *string, stealth *bool) error {
+// next tool call reinitializes with the new configuration.
+func (ctx *Context) Reconfigure(opts ReconfigureOptions) error {
 	ctx.browserLock.Lock()
 	defer ctx.browserLock.Unlock()
 
-	if headless != nil {
-		ctx.config.Headless = *headless
+	if opts.Headless != nil {
+		ctx.config.Headless = *opts.Headless
 	}
-	if cdpEndpoint != nil {
-		ctx.config.CDPEndpoint = *cdpEndpoint
+	if opts.CDPEndpoint != nil {
+		ctx.config.CDPEndpoint = *opts.CDPEndpoint
 	}
-	if stealth != nil {
-		ctx.config.Stealth = *stealth
+	if opts.Stealth != nil {
+		ctx.config.Stealth = *opts.Stealth
+	}
+	if opts.UserDataDir != nil {
+		ctx.config.UserDataDir = *opts.UserDataDir
+	}
+	if opts.CloneDomains != nil {
+		ctx.config.CloneDomains = *opts.CloneDomains
+	}
+	if opts.NoClone != nil {
+		ctx.config.NoClone = *opts.NoClone
+	}
+	if opts.CloneAll != nil {
+		ctx.config.CloneAll = *opts.CloneAll
 	}
 
 	// Close existing browser so the next initial() picks up new config.

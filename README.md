@@ -69,6 +69,21 @@ Or download a [pre-built binary](https://github.com/aliwatters/rod-mcp/releases)
 }
 ```
 
+**Visible browser for interactive login / 2FA**:
+
+```json
+{
+  "mcpServers": {
+    "rod-mcp-gui": {
+      "command": "rod-mcp",
+      "args": ["--no-banner", "--compact-snapshot"]
+    }
+  }
+}
+```
+
+`rod-mcp-gui` should not pass `--headless`. The browser opens a visible window on the first navigation so you can sign in or complete 2FA, then continue automation in the same session.
+
 **Cursor** (`.cursor/mcp.json`):
 
 ```json
@@ -130,7 +145,7 @@ That's it. Your AI agent can now browse the web.
 | `rod_set_headers` | Set HTTP headers for requests |
 | `rod_resize` | Set viewport size and device emulation |
 | `rod_handle_dialog` | Handle JavaScript dialogs (alert, confirm, prompt) |
-| `rod_configure` | Change headless mode or CDP endpoint at runtime |
+| `rod_configure` | Change headless mode, profile, or CDP endpoint at runtime |
 
 ### Tabs
 
@@ -284,6 +299,20 @@ rod-mcp --chrome-debug-port 9222
    ```
 
    Or use `rod_configure` at runtime to switch to a CDP endpoint.
+
+### Interactive login workflow
+
+Use `rod-mcp-gui` or configure a running server before the next navigation:
+
+```json
+{
+  "headless": false,
+  "user_data_dir": "/Users/alice/.config/rod-mcp/profiles/apple-music",
+  "no_clone": true
+}
+```
+
+Then call `rod_navigate` to open the login page, complete the login or 2FA in the visible Chrome window, and continue using the same MCP session. `no_clone=true` uses the profile directly so the login persists across server restarts; omit it when you only want a temporary cloned profile.
 
 ## Docker
 
