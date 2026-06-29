@@ -23,15 +23,25 @@ func TestConfigureToolDefinition(t *testing.T) {
 	if _, ok := props["cdp_endpoint"]; !ok {
 		t.Error("Configure tool missing 'cdp_endpoint' property")
 	}
+	if _, ok := props["user_data_dir"]; !ok {
+		t.Error("Configure tool missing 'user_data_dir' property")
+	}
+	if _, ok := props["clone_domains"]; !ok {
+		t.Error("Configure tool missing 'clone_domains' property")
+	}
+	if _, ok := props["no_clone"]; !ok {
+		t.Error("Configure tool missing 'no_clone' property")
+	}
+	if _, ok := props["clone_all"]; !ok {
+		t.Error("Configure tool missing 'clone_all' property")
+	}
 	if _, ok := props["stealth"]; !ok {
 		t.Error("Configure tool missing 'stealth' property")
 	}
 
-	// headless, cdp_endpoint, and stealth should be optional (not required)
+	// All configure fields should be optional.
 	for _, r := range Configure.InputSchema.Required {
-		if r == "headless" || r == "cdp_endpoint" || r == "stealth" {
-			t.Errorf("Configure tool parameter %q should not be required", r)
-		}
+		t.Errorf("Configure tool parameter %q should not be required", r)
 	}
 }
 
@@ -175,6 +185,44 @@ func TestConfigureHandlerStealth(t *testing.T) {
 
 	if !rodCtx.Config().Stealth {
 		t.Error("expected Stealth to be true after reconfigure")
+	}
+}
+
+func TestConfigureHandlerUserDataDir(t *testing.T) {
+	cfg := types.DefaultConfig
+	rodCtx := types.NewContext(context.Background(), cfg)
+	defer rodCtx.Close()
+
+	handler := ConfigureHandler(rodCtx)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]interface{}{
+		"headless":      false,
+		"user_data_dir": "/tmp/chrome-profile",
+		"clone_domains": "example.com, *.example.org",
+		"no_clone":      true,
+	}
+
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := result.Content[0].(mcp.TextContent).Text
+	if text != "Browser configured: headless=false, user_data_dir=/tmp/chrome-profile, clone_domains=example.com, *.example.org, no_clone=true. Changes take effect on next browser action." {
+		t.Errorf("unexpected result text: %s", text)
+	}
+
+	got := rodCtx.Config()
+	if got.Headless {
+		t.Error("expected Headless to be false")
+	}
+	if got.UserDataDir != "/tmp/chrome-profile" {
+		t.Errorf("UserDataDir = %q, want /tmp/chrome-profile", got.UserDataDir)
+	}
+	if got.NoClone != true {
+		t.Error("expected NoClone to be true")
+	}
+	if len(got.CloneDomains) != 2 || got.CloneDomains[0] != "example.com" || got.CloneDomains[1] != "*.example.org" {
+		t.Errorf("CloneDomains = %#v, want parsed domains", got.CloneDomains)
 	}
 }
 

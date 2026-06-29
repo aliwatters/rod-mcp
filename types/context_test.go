@@ -271,7 +271,11 @@ func TestReconfigure_UpdatesConfig(t *testing.T) {
 	endpoint := "http://localhost:9222"
 
 	stealth := true
-	err := ctx.Reconfigure(&headless, &endpoint, &stealth)
+	err := ctx.Reconfigure(ReconfigureOptions{
+		Headless:    &headless,
+		CDPEndpoint: &endpoint,
+		Stealth:     &stealth,
+	})
 	if err != nil {
 		t.Fatalf("Reconfigure: unexpected error: %v", err)
 	}
@@ -287,12 +291,43 @@ func TestReconfigure_UpdatesConfig(t *testing.T) {
 	}
 }
 
+func TestReconfigure_UpdatesProfileSettings(t *testing.T) {
+	ctx := newTestContext()
+	userDataDir := "/tmp/chrome-profile"
+	cloneDomains := []string{"example.com"}
+	noClone := true
+	cloneAll := false
+
+	err := ctx.Reconfigure(ReconfigureOptions{
+		UserDataDir:  &userDataDir,
+		CloneDomains: &cloneDomains,
+		NoClone:      &noClone,
+		CloneAll:     &cloneAll,
+	})
+	if err != nil {
+		t.Fatalf("Reconfigure: unexpected error: %v", err)
+	}
+
+	if ctx.config.UserDataDir != userDataDir {
+		t.Errorf("Reconfigure: UserDataDir = %q, want %q", ctx.config.UserDataDir, userDataDir)
+	}
+	if len(ctx.config.CloneDomains) != 1 || ctx.config.CloneDomains[0] != "example.com" {
+		t.Errorf("Reconfigure: CloneDomains = %#v, want [example.com]", ctx.config.CloneDomains)
+	}
+	if ctx.config.NoClone != true {
+		t.Error("Reconfigure: NoClone should be true")
+	}
+	if ctx.config.CloneAll != false {
+		t.Error("Reconfigure: CloneAll should be false")
+	}
+}
+
 func TestReconfigure_NilFields_NoChange(t *testing.T) {
 	ctx := newTestContext()
 	ctx.config.Headless = true
 	ctx.config.CDPEndpoint = "http://existing"
 
-	err := ctx.Reconfigure(nil, nil, nil)
+	err := ctx.Reconfigure(ReconfigureOptions{})
 	if err != nil {
 		t.Fatalf("Reconfigure(nil, nil, nil): unexpected error: %v", err)
 	}
@@ -704,7 +739,7 @@ func TestReconfigure_Stealth(t *testing.T) {
 	ctx.config.Stealth = false
 
 	stealth := true
-	err := ctx.Reconfigure(nil, nil, &stealth)
+	err := ctx.Reconfigure(ReconfigureOptions{Stealth: &stealth})
 	if err != nil {
 		t.Fatalf("Reconfigure stealth: unexpected error: %v", err)
 	}
@@ -713,7 +748,7 @@ func TestReconfigure_Stealth(t *testing.T) {
 	}
 
 	stealth = false
-	err = ctx.Reconfigure(nil, nil, &stealth)
+	err = ctx.Reconfigure(ReconfigureOptions{Stealth: &stealth})
 	if err != nil {
 		t.Fatalf("Reconfigure stealth=false: unexpected error: %v", err)
 	}

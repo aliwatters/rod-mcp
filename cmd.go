@@ -11,6 +11,7 @@ import (
 
 type SubCfg struct {
 	Headless        bool
+	HeadlessSet     bool
 	ConfigPath      string
 	Mode            types.Mode
 	CDPEndpoint     string
@@ -25,6 +26,10 @@ type SubCfg struct {
 }
 
 func RunCmd() (*SubCfg, error) {
+	return parseCommandArgs(os.Args)
+}
+
+func parseCommandArgs(args []string) (*SubCfg, error) {
 	subConfig := SubCfg{}
 	cmd := &cli.App{
 		Name:        "Rod MCP Server",
@@ -72,6 +77,10 @@ func RunCmd() (*SubCfg, error) {
 				Destination: &subConfig.Headless,
 			},
 			&cli.BoolFlag{
+				Name:  "gui",
+				Usage: "force a visible browser window by setting headless=false",
+			},
+			&cli.BoolFlag{
 				Name:    "vision",
 				Aliases: []string{"vs"},
 				Usage:   "use to support vision LLM will load  vision tools",
@@ -87,8 +96,8 @@ func RunCmd() (*SubCfg, error) {
 				Destination: &subConfig.OutputDir,
 			},
 			&cli.BoolFlag{
-				Name:    "omit-images",
-				Usage:   "omit inline base64 image data from screenshot results (saves tokens)",
+				Name:  "omit-images",
+				Usage: "omit inline base64 image data from screenshot results (saves tokens)",
 			},
 			&cli.BoolFlag{
 				Name:   "no-banner",
@@ -96,8 +105,16 @@ func RunCmd() (*SubCfg, error) {
 			},
 		},
 		Action: func(c *cli.Context) error {
-			if c.Bool("headless") {
-				subConfig.Headless = true
+			if c.IsSet("headless") {
+				subConfig.Headless = c.Bool("headless")
+				subConfig.HeadlessSet = true
+			}
+			if c.Bool("gui") {
+				if subConfig.HeadlessSet && subConfig.Headless {
+					return fmt.Errorf("--gui cannot be combined with --headless")
+				}
+				subConfig.Headless = false
+				subConfig.HeadlessSet = true
 			}
 
 			if c.Bool("vision") {
@@ -115,7 +132,7 @@ func RunCmd() (*SubCfg, error) {
 			return nil
 		},
 	}
-	err := cmd.Run(os.Args)
+	err := cmd.Run(args)
 	if err != nil {
 		return nil, fmt.Errorf("run cmd: %w", err)
 	}
