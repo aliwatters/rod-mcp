@@ -76,13 +76,13 @@ Or download a [pre-built binary](https://github.com/aliwatters/rod-mcp/releases)
   "mcpServers": {
     "rod-mcp-gui": {
       "command": "rod-mcp",
-      "args": ["--no-banner", "--compact-snapshot"]
+      "args": ["--gui", "--no-banner", "--compact-snapshot"]
     }
   }
 }
 ```
 
-`rod-mcp-gui` should not pass `--headless`. The browser opens a visible window on the first navigation so you can sign in or complete 2FA, then continue automation in the same session.
+`rod-mcp-gui` passes `--gui`, which forces `headless=false` even when the default config is absent or still says `headless: true`. The browser opens a visible window on the first navigation so you can sign in or complete 2FA, then continue automation in the same session.
 
 **Cursor** (`.cursor/mcp.json`):
 

@@ -14,8 +14,8 @@ import (
 // applyOverrides merges CLI flag values from subCfg into cfg,
 // letting explicit CLI flags take precedence over the config file.
 func applyOverrides(cfg *types.Config, subCfg *SubCfg) {
-	if subCfg.Headless {
-		cfg.Headless = true
+	if subCfg.HeadlessSet {
+		cfg.Headless = subCfg.Headless
 	}
 	if subCfg.Mode != "" {
 		cfg.Mode = subCfg.Mode

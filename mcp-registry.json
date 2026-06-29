@@ -8,7 +8,7 @@
   },
   "rod-mcp-gui": {
     "command": "~/.local/libexec/rod-mcp",
-    "args": ["--no-banner", "--compact-snapshot", "--config", "~/.config/rod-mcp/rod-mcp-gui.yaml"],
+    "args": ["--gui", "--no-banner", "--compact-snapshot"],
     "description": "Visible Rod MCP browser for interactive login and 2FA flows. Headful by default; use rod_configure to attach a persistent profile or CDP endpoint.",
     "keywords": ["browser", "gui", "visible", "login", "2fa", "auth", "rod", "navigate"],
     "category": "browser"
