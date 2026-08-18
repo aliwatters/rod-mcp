@@ -9,6 +9,10 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
+// guiEnvVar forces a visible browser even when --headless is in the MCP
+// launch args. MCP clients typically inherit this from the parent agent.
+const guiEnvVar = "ROD_MCP_GUI"
+
 type SubCfg struct {
 	Headless        bool
 	HeadlessSet     bool
@@ -78,7 +82,7 @@ func parseCommandArgs(args []string) (*SubCfg, error) {
 			},
 			&cli.BoolFlag{
 				Name:  "gui",
-				Usage: "force a visible browser window by setting headless=false",
+				Usage: "force a visible browser window by setting headless=false (also " + guiEnvVar + "=1; overrides --headless)",
 			},
 			&cli.BoolFlag{
 				Name:    "vision",
@@ -136,7 +140,25 @@ func parseCommandArgs(args []string) (*SubCfg, error) {
 	if err != nil {
 		return nil, fmt.Errorf("run cmd: %w", err)
 	}
+	// Applied after flags so an inherited env can flip a registry-style
+	// `args: ["--headless"]` launch to a visible window.
+	if envForcesHeadful(os.Getenv(guiEnvVar)) {
+		subConfig.Headless = false
+		subConfig.HeadlessSet = true
+	}
 	return &subConfig, nil
+}
+
+// envForcesHeadful reports whether a ROD_MCP_GUI-style value requests a
+// visible browser. Unset, empty, and common falsy values leave other
+// headless sources (flags, yaml, default) alone.
+func envForcesHeadful(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseCloneDomains splits a comma-separated domain string into a slice.
